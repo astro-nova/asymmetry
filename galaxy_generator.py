@@ -199,21 +199,38 @@ def sky_noise(image_psf, sky_mag, pixel_scale, telescope_params, transmission_pa
 	# If noise is given as background rms instead of background brightness
 	if rms_noise: sky_electrons = sky_electrons**2
 
-    
+	
 
 	# copy image in case iterating over and changing noise level
+	if 'galsim' in str(type(image_psf)):
 
-	image_noise_setup = image_psf.copy()
-	# print(np.min(image_noise_setup), sky_electrons)
-	image_noise_setup += sky_electrons
-	# print(np.min(image_noise_setup), '\n')
-	image_noise = np.random.poisson(lam=image_noise_setup).astype(float)
+		# print('galsim')
 
-	image_noise -= sky_electrons
+		rng = galsim.BaseDeviate(seed) # if want to seed noise
+		image_noise_setup = image_psf.copy()
+		# print(np.min(image_noise.array))
+		image_noise_setup.addNoise(galsim.PoissonNoise(rng=rng, sky_level=sky_electrons))
 
+		image_noise = image_noise_setup.array
+	
 
+	elif type(image_psf) == np.ndarray:
+		# print('astropy')
+		image_noise_setup = image_psf.copy()
+		# print(np.min(image_noise_setup), sky_electrons)
+		image_noise_setup += sky_electrons
+		# print(np.min(image_noise_setup), '\n')
+		image_noise = np.random.poisson(lam=image_noise_setup).astype(float)
+
+		image_noise -= sky_electrons
+
+		
+
+	else:
+		print('Type not understood')
 
 	return image_noise, sky_electrons
+		
 
 
 
@@ -403,7 +420,7 @@ def create_clumps(image, rp, N,  gal_mag, telescope_params, transmission_params,
 
 
 
-def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale=0.396):
+def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale=0.396, psf_method='galsim'):
 	"""
 	adding source galaxy and clumps to image *then* convolve with psf
 	Args:
@@ -417,36 +434,74 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 		image_psf (galsim object) : image with psf-convolved objects added in
 	"""
 	# make copy of image in case iterating over and changing psf each time
+
 	image_psf = image.copy()
+	if psf_method == 'galsim':
+		# print('galsim')
+		if psf_fwhm > 0:
+			# define Gaussian psf
+			psf = galsim.Gaussian(flux=1., sigma=psf_fwhm)
+			# convolve galaxy with psf
+			final_gal = galsim.Convolve([galaxy,psf])
+		else:
+			final_gal = galaxy
+
+		# stamp galaxy and add to image
+		stamp_gal = final_gal.drawImage(wcs=image_psf.wcs.local(image_psf.center)) #galaxy at image center
+		stamp_gal.setCenter(image_psf.center.x, image_psf.center.y)
+		bounds_gal = stamp_gal.bounds & image_psf.bounds
+		image_psf[bounds_gal] += stamp_gal[bounds_gal]
+
+
+		if clumps:
+			for i in range(len(clumps)):
+				clump = clumps[i]
+				xi = all_xi[i]
+				yi = all_yi[i]
+
+				final_clump = galsim.Convolve([clump,psf]) if psf_fwhm > 0 else clump
+				stamp_clump = final_clump.drawImage(wcs=image_psf.wcs.local(galsim.PositionI(xi, yi)))
+				stamp_clump.setCenter(xi, yi)
+				bounds_clump = stamp_clump.bounds & image_psf.bounds
+				image_psf[bounds_clump] += stamp_clump[bounds_clump]
 
 	
-	final_gal = galaxy
 
-	# stamp galaxy and add to image
-	stamp_gal = final_gal.drawImage(wcs=image_psf.wcs.local(image_psf.center)) #galaxy at image center
-	stamp_gal.setCenter(image_psf.center.x, image_psf.center.y)
-	bounds_gal = stamp_gal.bounds & image_psf.bounds
-	image_psf[bounds_gal] += stamp_gal[bounds_gal]
+	elif psf_method == 'astropy':
+		# print('astropy')
 
 
-	if clumps:
-		for i in range(len(clumps)):
-			clump = clumps[i]
-			xi = all_xi[i]
-			yi = all_yi[i]
+		
+		final_gal = galaxy
 
-			final_clump = clump
-			stamp_clump = final_clump.drawImage(wcs=image_psf.wcs.local(galsim.PositionI(xi, yi)))
-			stamp_clump.setCenter(xi, yi)
-			bounds_clump = stamp_clump.bounds & image_psf.bounds
-			image_psf[bounds_clump] += stamp_clump[bounds_clump]
+		# stamp galaxy and add to image
+		stamp_gal = final_gal.drawImage(wcs=image_psf.wcs.local(image_psf.center)) #galaxy at image center
+		stamp_gal.setCenter(image_psf.center.x, image_psf.center.y)
+		bounds_gal = stamp_gal.bounds & image_psf.bounds
+		image_psf[bounds_gal] += stamp_gal[bounds_gal]
 
-	if psf_fwhm > 0:
-			# define Gaussian psf
-			kernel = Gaussian2DKernel(x_stddev=psf_fwhm/pxscale)
-			image_psf = convolve(image_psf.array, kernel)
+
+		if clumps:
+			for i in range(len(clumps)):
+				clump = clumps[i]
+				xi = all_xi[i]
+				yi = all_yi[i]
+
+				final_clump = clump
+				stamp_clump = final_clump.drawImage(wcs=image_psf.wcs.local(galsim.PositionI(xi, yi)))
+				stamp_clump.setCenter(xi, yi)
+				bounds_clump = stamp_clump.bounds & image_psf.bounds
+				image_psf[bounds_clump] += stamp_clump[bounds_clump]
+
+		if psf_fwhm > 0:
+				# define Gaussian psf
+				kernel = Gaussian2DKernel(x_stddev=psf_fwhm/pxscale)
+				image_psf = convolve(image_psf.array, kernel)
+		else:
+			image_psf = image_psf.array
+
 	else:
-		image_psf = image_psf.array
+		print('psf method not understood')
 
 	return image_psf
 

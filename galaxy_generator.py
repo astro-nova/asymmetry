@@ -8,6 +8,7 @@ from astropy.table import Table
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.convolution import Gaussian2DKernel, convolve
+from astropy.stats import gaussian_fwhm_to_sigma
 from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d
 from scipy.integrate import simps
@@ -18,9 +19,9 @@ import matplotlib.pyplot as plt
 
 
 _default_clump_properties = {
-	'r' : (0.05, 1.5),
-	'flux' : (0.05, 0.3),
-	'sigma' : (1, 5)
+	'r' : (0.05, 1.0),
+	'flux' : (0.05, 0.5),
+	'sigma' : (0.5, 5)
 }
 
 
@@ -216,20 +217,23 @@ def sky_noise(image_psf, sky_mag, pixel_scale, telescope_params, transmission_pa
 
 	elif type(image_psf) == np.ndarray:
 		# print('astropy')
+		
 		image_noise_setup = image_psf.copy()
-		# print(np.min(image_noise_setup), sky_electrons)
+		# # print(np.min(image_noise_setup), sky_electrons)
 		image_noise_setup += sky_electrons
-		# print(np.min(image_noise_setup), '\n')
+		# # print(np.min(image_noise_setup), '\n')
 		image_noise = np.random.poisson(lam=image_noise_setup).astype(float)
 
-		image_noise -= sky_electrons
+		# print('here')
+		image_noise = image_psf + np.random.normal(loc=0, scale=np.sqrt(sky_electrons), size=image_psf.shape)
+		# image_noise -= sky_electrons
 
 		
 
 	else:
 		print('Type not understood')
 
-	return image_noise, sky_electrons
+	return image_noise, np.sqrt(sky_electrons)
 		
 
 
@@ -420,7 +424,8 @@ def create_clumps(image, rp, N,  gal_mag, telescope_params, transmission_params,
 
 
 
-def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale=0.396, psf_method='galsim'):
+def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale=0.396, psf_method='galsim',
+			use_moffat=False):
 	"""
 	adding source galaxy and clumps to image *then* convolve with psf
 	Args:
@@ -430,6 +435,7 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 		all_xi (list of ints) : list of x positions for clumps
 		all_yi (list of ints) : list of y positions for clumps
 		psf_sig (float) : sigma for gaussian psf for image
+		use_moffat (bool): use Moffat instead of Gaussian PSF?
 	Returns:
 		image_psf (galsim object) : image with psf-convolved objects added in
 	"""
@@ -437,10 +443,14 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 
 	image_psf = image.copy()
 	if psf_method == 'galsim':
-		# print('galsim')
+
 		if psf_fwhm > 0:
-			# define Gaussian psf
-			psf = galsim.Gaussian(flux=1., sigma=psf_fwhm)
+			# define psf
+			if use_moffat:
+				psf = galsim.Moffat(beta=2.45, flux=1., fwhm=psf_fwhm)
+			else:
+				psf = galsim.Gaussian(flux=1., sigma=psf_fwhm*gaussian_fwhm_to_sigma)
+
 			# convolve galaxy with psf
 			final_gal = galsim.Convolve([galaxy,psf])
 		else:
@@ -464,6 +474,8 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 				stamp_clump.setCenter(xi, yi)
 				bounds_clump = stamp_clump.bounds & image_psf.bounds
 				image_psf[bounds_clump] += stamp_clump[bounds_clump]
+
+		image_psf = image_psf.array
 
 	
 
@@ -495,7 +507,7 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 
 		if psf_fwhm > 0:
 				# define Gaussian psf
-				kernel = Gaussian2DKernel(x_stddev=psf_fwhm/pxscale)
+				kernel = Gaussian2DKernel(x_stddev=psf_fwhm*gaussian_fwhm_to_sigma/pxscale)
 				image_psf = convolve(image_psf.array, kernel)
 		else:
 			image_psf = image_psf.array

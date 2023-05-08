@@ -4,6 +4,7 @@ import warnings
 from scipy import optimize as opt
 from skimage import transform as T
 from skimage import measure
+from scipy import fft
 
 
 def _sky_properties(img, bg_size, a_type='cas'):
@@ -44,7 +45,7 @@ def _sky_properties(img, bg_size, a_type='cas'):
     return sky_a, sky_norm
 
 
-def _asymmetry_func(center, img, ap_size, 
+def _asymmetry_func(center, img, ap_size,
         a_type='cas', sky_type='skybox', sky_a=None, sky_norm=None, 
         sky_annulus=(1.5, 2), bg_corr='full',
         e=0, theta=0
@@ -87,6 +88,9 @@ def _asymmetry_func(center, img, ap_size,
     assert a_type in ['cas', 'squared'], 'a_type should be "cas" or "squared"'
     assert bg_corr in ['none', 'residual', 'full'], 'bg_corr should be "none", "residual", or "full".'
     assert sky_type in ['skybox', 'annulus'], 'sky_type should be "skybox" or "annulus".'
+
+    # Calculate dx
+    dx = 1/(img.shape[0]*img.shape[1])
 
     # Rotate the image about asymmetry center
     img_rotated = T.rotate(img, 180, center=center, order=0)
@@ -132,10 +136,48 @@ def _asymmetry_func(center, img, ap_size,
 
 
 
+def _asymmetry_fourier(center, img, sky_a=None, sky_norm=None):
+    
+    # Rotate the image about asymmetry center
+    img_rotated = T.rotate(img, 180, center=center, order=0)
+
+    # Calculate asymmetry of the image
+        total_flux = ap.do_photometry(np.abs(img))[0][0]
+        residual = ap.do_photometry(np.abs(img-img_rotated))[0][0]
+
+
+    # Calculate sky asymmetry if sky_type is "annulus"
+    if sky_type == 'annulus':
+        ap_sky = phot.EllipticalAnnulus(
+            center, a_in=ap_size*sky_annulus[0], a_out=ap_size*sky_annulus[1],
+            b_out=ap_size*sky_annulus[1]*(1-e), theta=theta
+        )
+        sky_area = ap_sky.do_photometry(np.ones_like(img))[0][0]
+        if a_type =='cas':
+            sky_a = ap_sky.do_photometry(np.abs(img-img_rotated))[0][0] / sky_area
+            sky_norm = ap_sky.do_photometry(np.abs(img))[0][0] / sky_area
+        elif a_type == 'squared':
+            sky_a = 10*ap_sky.do_photometry((img-img_rotated)**2)[0][0] / sky_area
+            sky_norm = ap_sky.do_photometry(img**2)[0][0] / sky_area
+    
+    # Correct for the background
+    if bg_corr == 'none':
+        a = residual / total_flux
+    elif bg_corr == 'residual':
+        # print(residual, ap_area*sky_a, total_flux, ap_area*sky_norm)
+        a = (residual - ap_area*sky_a) / total_flux
+    elif bg_corr == 'full':
+        a = (residual - ap_area*sky_a) / (total_flux - ap_area*sky_norm)
+
+    return a
+
+
+
 def get_asymmetry(
         img, ap_size, a_type='cas', 
         sky_type='skybox', bg_size=50, sky_annulus=(1.5,2), bg_corr='residual', 
-        e=0, theta=0, xtol=0.5, atol=0.1
+        e=0, theta=0, 
+        optimizer='Nelder-Mead', xtol=0.5, atol=0.1
     ):
     """Finds asymmetry of an image by optimizing the rotation center
     that minimizes the asymmetry calculated in _asymmetry_func. 
@@ -186,15 +228,20 @@ def get_asymmetry(
     # more weight on the central object and avoids placing the first guess on a local max.
     M = measure.moments(img**2, order=2)
     x0 = (M[0, 1] / M[0, 0], M[1, 0] / M[0, 0])
+    # res = opt.minimize(
+        
+    #     _asymmetry_func, x0=x0, method=optimizer,
+    #     options={
+    #         'xatol': xtol, 'fatol' : atol
+    #     },
+    #     args=(img, ap_size, a_type, sky_type, sky_a, sky_norm, sky_annulus, bg_corr, e, theta))
 
-    # Optimize the asymmetry center
-    res = opt.minimize(
-        _asymmetry_func, x0=x0, method='Nelder-Mead',
-        options={'xatol': xtol, 'fatol' : atol},
-        args=(img, ap_size, a_type, sky_type, sky_a, sky_norm, sky_annulus, bg_corr, e, theta))
-    
-    a = res.fun
-    center = res.x
+    # a = res.fun
+    # center = res.x
+
+    x0 = np.array([img.shape[1]/2, img.shape[0]/2], dtype=int)
+    a = _asymmetry_func(x0, img, ap_size, a_type, sky_type, sky_a, sky_norm, sky_annulus, bg_corr, e, theta)
+    center = x0
 
     return a, center
 

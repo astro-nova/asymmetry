@@ -136,10 +136,20 @@ def _asymmetry_func(center, img, ap_size,
 
 
 
-def _asymmetry_fourier(center, img, sky_a=None, sky_norm=None):
+def _asymmetry_fourier(center, img, psf, sky_a=None, sky_norm=None):
     
     # Rotate the image about asymmetry center
     img_rotated = T.rotate(img, 180, center=center, order=0)
+
+    # Fourier transform image
+    img_fft = fft.fft2(img)
+    img_rot_fft = fft.fft2(img_rotated)
+    diff_fft = img_fft - img_rot_fft
+    fft_sum = np.sum( (im))
+
+    psf_fft = fft.fft2(fft.fftshift(psf))
+    psf_fft[(np.abs(psf_fft)) < 0.1] = 0.1
+
 
     # Calculate asymmetry of the image
         total_flux = ap.do_photometry(np.abs(img))[0][0]

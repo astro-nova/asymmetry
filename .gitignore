@@ -1,6 +1,12 @@
 # Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python
 
+
+### Large files
+data/
+figures/
+old-notebooks/
+
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -29,6 +35,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+__pycache__/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -80,7 +87,7 @@ docs/_build/
 target/
 
 # Jupyter Notebook
-.ipynb_checkpoints
+.ipynb_checkpoints/
 
 # IPython
 profile_default/

@@ -7,7 +7,7 @@ import numpy as np
 from astropy.table import Table
 from astropy import units as u
 from astropy.coordinates import SkyCoord
-from astropy.convolution import Gaussian2DKernel, convolve
+from astropy.convolution import Gaussian2DKernel, convolve, convolve_fft
 from astropy.stats import gaussian_fwhm_to_sigma
 from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d
@@ -19,9 +19,9 @@ import matplotlib.pyplot as plt
 
 
 _default_clump_properties = {
-	'r' : (0.05, 1.0),
+	'r' : (0.05, 0.8),
 	'flux' : (0.05, 0.5),
-	'sigma' : (0.5, 5)
+	'sigma' : (0.3, 5)
 }
 
 
@@ -133,46 +133,7 @@ def gen_galaxy(mag, re, n, q, beta, telescope_params, transmission_params, bandp
 	return gal
 
 
-# # # def sky_noise_OLD(image_psf, sky_mag, pixel_scale, telescope_params, transmission_params, bandpass, seed=None, rms_noise=False):
-# # # 	"""
-# # # 	take image and sky level, calculate level in electrons and apply noise with sky level and source e counts
-# # # 	can be seeded
-
-# # # 	Args:
-# # # 		image_psf (galsim obj) : galsim image object with sources added and convolved with psf
-# # # 		sky_mag (float) : mag/arcsec^2 value of sky background
-# # # 		pixel_scale (flaot) : arcsec/pixel
-# # # 		telescope_params (dict) : telescope parameters (gain, exptime and mirror diameter)
-# # # 		transmission_params (dict) : tramission parameters (effective wavelength and width)
-# # # 		bandpass (galsim obbject) : galsim bandpass object defining the total throughput curve
-# # # 		seed (int) : seed value for noise (default None)
-# # # 		rms_noise (bool): whether the sky_mag is the brightness of the sky (default, False) or its RMS brightness (True)
-# # # 	Returns:
-# # # 		image_noise (galsim object) : image_psf + addded noise (image_psf is preserved due to copying)
-# # # 	"""
-# # # 	g, t_exp, D = telescope_params['g'],telescope_params['t_exp'],telescope_params['D']
-# # # 	eff_wav, del_wav = transmission_params['eff_wav'],transmission_params['del_wav']
-
-# # # 	transmission = bandpass(transmission_params['eff_wav'])
-
-# # # 	sky_uJy = mag2uJy(sky_mag)*pixel_scale*pixel_scale
-# # # 	sky_electrons = uJy2galflux(sky_uJy, eff_wav, del_wav, transmission) * t_exp * np.pi * (D*100./2)**2
-
-# # # 	# If noise is given as background rms instead of background brightness
-# # # 	if rms_noise: sky_electrons = sky_electrons**2
-
-# # # 	rng = galsim.BaseDeviate(seed) # if want to seed noise
-
-# # # 	# copy image in case iterating over and changing noise level
-	
-# # # 	image_noise = image_psf.copy()
-# # # 	# print(np.min(image_noise.array))
-# # # 	image_noise.addNoise(galsim.PoissonNoise(rng=rng, sky_level=sky_electrons))
-
-# # # 	return image_noise, sky_electrons
-
-
-def sky_noise(image_psf, sky_mag, pixel_scale, telescope_params, transmission_params, bandpass, seed=None, rms_noise=False):
+def sky_noise(image_psf, sky_mag, pixel_scale, seed=None, rms_noise=False):
 	"""
 	take image and sky level, calculate level in electrons and apply noise with sky level and source e counts
 	can be seeded
@@ -189,6 +150,12 @@ def sky_noise(image_psf, sky_mag, pixel_scale, telescope_params, transmission_pa
 	Returns:
 		image_noise (galsim object) : image_psf + addded noise (image_psf is preserved due to copying)
 	"""
+	telescope_params = {'g':4.8, 't_exp':53.91, 'D':2.5}
+    ## effective wavelength and width of filter
+	transmission_params = {'eff_wav':616.5, 'del_wav':137}
+	filt = 'r'
+	bandpass_file = "passband_sdss_" + filt
+	bandpass = galsim.Bandpass(bandpass_file, wave_type = u.angstrom)
 	g, t_exp, D = telescope_params['g'],telescope_params['t_exp'],telescope_params['D']
 	eff_wav, del_wav = transmission_params['eff_wav'],transmission_params['del_wav']
 
@@ -225,8 +192,9 @@ def sky_noise(image_psf, sky_mag, pixel_scale, telescope_params, transmission_pa
 		image_noise = np.random.poisson(lam=image_noise_setup).astype(float)
 
 		# print('here')
-		image_noise = image_psf + np.random.normal(loc=0, scale=np.sqrt(sky_electrons), size=image_psf.shape)
-		# image_noise -= sky_electrons
+		# NO POISSON NOISE RIGHT NOW
+		# image_noise = image_noise + np.random.normal(loc=, scale=np.sqrt(sky_electrons), size=image_psf.shape)
+		image_noise -= sky_electrons
 
 		
 
@@ -234,8 +202,6 @@ def sky_noise(image_psf, sky_mag, pixel_scale, telescope_params, transmission_pa
 		print('Type not understood')
 
 	return image_noise, np.sqrt(sky_electrons)
-		
-
 
 
 def petrosian_sersic(fov, re, n):
@@ -253,7 +219,6 @@ def petrosian_sersic(fov, re, n):
 	R_p2_array = petrofit.modeling.models.petrosian_profile(R_vals, re, n)
 	R_p2 = R_vals[np.argmin(np.abs(R_p2_array-0.2))]
 	return R_p2
-
 
 def create_clumps(image, rp, N,  gal_mag, telescope_params, transmission_params, bandpass,
 				  clump_properties=None, random_clump_properties=None, seed=None):
@@ -316,11 +281,14 @@ def create_clumps(image, rp, N,  gal_mag, telescope_params, transmission_params,
 	fmin = np.log10(random_clump_properties['flux'][0])
 	fmax = np.log10(random_clump_properties['flux'][1])
 	# flux_fracs = 10**np.linspace(np.log10(0.05), np.log10(0.1), len(xvals))
-	flux_fracs = np.logspace(fmin, fmax, len(xvals))
+	flux_fracs = np.random.random(len(xvals))*(fmax-fmin) + fmin
+	flux_fracs = np.power(10, flux_fracs)
+	# flux_fracs = np.logspace(fmin, fmax, len(xvals))
 
 	smin = random_clump_properties['sigma'][0]
 	smax = random_clump_properties['sigma'][1]
-	sigs = np.linspace(smin, smax, len(xvals))
+	# sigs = np.linspace(smin, smax, len(xvals))
+	sigs = np.random.random(len(xvals))*(smax-smin) + smin
 
 	clumps = []
 	all_xi = []
@@ -376,52 +344,6 @@ def create_clumps(image, rp, N,  gal_mag, telescope_params, transmission_params,
 		all_yi.append(yi)
 
 	return clumps, all_xi, all_yi
-
-# def add_source_to_image_OLD(image, galaxy, clumps, all_xi, all_yi, psf_fwhm):
-# 	"""
-# 	adding source galaxy and clumps to image after convolving with psf
-# 	Args:
-# 		image (galsim object)  : galsim image with fov and wcs set (needed for setting center)
-# 		galaxy (galsim object) : galaxy with defined sersic profile
-# 		clumps (list of galsim objects) : list of all clump objects to add to image
-# 		all_xi (list of ints) : list of x positions for clumps
-# 		all_yi (list of ints) : list of y positions for clumps
-# 		psf_sig (float) : sigma for gaussian psf for image
-# 	Returns:
-# 		image_psf (galsim object) : image with psf-convolved objects added in
-# 	"""
-# 	# make copy of image in case iterating over and changing psf each time
-# 	image_psf = image.copy()
-
-# 	if psf_fwhm > 0:
-# 		# define Gaussian psf
-# 		psf = galsim.Gaussian(flux=1., sigma=psf_fwhm)
-# 		# convolve galaxy with psf
-# 		final_gal = galsim.Convolve([galaxy,psf])
-# 	else:
-# 		final_gal = galaxy
-
-# 	# stamp galaxy and add to image
-# 	stamp_gal = final_gal.drawImage(wcs=image_psf.wcs.local(image_psf.center)) #galaxy at image center
-# 	stamp_gal.setCenter(image_psf.center.x, image_psf.center.y)
-# 	bounds_gal = stamp_gal.bounds & image_psf.bounds
-# 	image_psf[bounds_gal] += stamp_gal[bounds_gal]
-
-
-# 	if clumps:
-# 		for i in range(len(clumps)):
-# 			clump = clumps[i]
-# 			xi = all_xi[i]
-# 			yi = all_yi[i]
-
-# 			final_clump = galsim.Convolve([clump,psf]) if psf_fwhm > 0 else clump
-# 			stamp_clump = final_clump.drawImage(wcs=image_psf.wcs.local(galsim.PositionI(xi, yi)))
-# 			stamp_clump.setCenter(xi, yi)
-# 			bounds_clump = stamp_clump.bounds & image_psf.bounds
-# 			image_psf[bounds_clump] += stamp_clump[bounds_clump]
-
-# 	return image_psf
-
 
 
 def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale=0.396, psf_method='galsim',
@@ -507,8 +429,9 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 
 		if psf_fwhm > 0:
 				# define Gaussian psf
-				kernel = Gaussian2DKernel(x_stddev=psf_fwhm*gaussian_fwhm_to_sigma/pxscale)
-				image_psf = convolve(image_psf.array, kernel)
+				ysize, xsize = image_psf.array.shape
+				kernel = Gaussian2DKernel(x_stddev=psf_fwhm*gaussian_fwhm_to_sigma/pxscale, x_size=xsize, y_size=ysize)
+				image_psf = convolve_fft(image_psf.array, kernel, boundary="wrap")
 		else:
 			image_psf = image_psf.array
 
@@ -517,6 +440,52 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 
 	return image_psf
 
+
+
+def simuale_perfect_galaxy(mag, r_eff, pxscale, fov_reff=10, sersic_n=1, q=1, beta=0, n_clumps=10, clump_properties=None, random_clump_properties=None):
+	#################### SDSS set-up ###########################
+    sdss_ra = 150
+    sdss_dec = 2.3
+    filt = 'r'
+    bandpass_file = "passband_sdss_" + filt
+    bandpass = galsim.Bandpass(bandpass_file, wave_type = u.angstrom)
+    ## gain, exptime and diameter of telescope
+    telescope_params = {'g':4.8, 't_exp':53.91, 'D':2.5}
+    ## effective wavelength and width of filter
+    transmission_params = {'eff_wav':616.5, 'del_wav':137}
+    
+	############## Sersic profile only #########################
+    # Calculate field of view in degrees
+    fov = fov_reff * r_eff / 3600
+    
+    # generate blank image with fov and wcs info
+    field_image, wcs = gen_image(sdss_ra, sdss_dec, pxscale, fov, fov)
+
+    # create a galaxy with given params
+    galaxy = gen_galaxy(mag=mag, re=r_eff, n=sersic_n, q=q, beta=beta, telescope_params=telescope_params, 
+                        transmission_params=transmission_params, bandpass=bandpass)
+    
+    # get petrosian radius of galaxy in px
+    r_pet = petrosian_sersic(fov, r_eff, 1)/pxscale
+    
+    ############## Asymmetry clumps ############################
+     # generate all the clumps and their positions
+    clumps, all_xi, all_yi = create_clumps(field_image, r_pet, n_clumps, mag, telescope_params, transmission_params, bandpass,
+                                           clump_properties, random_clump_properties)
+    
+	############## Perfect image ###############################
+    image_perfect = add_source_to_image(field_image, galaxy, clumps, all_xi, all_yi, 0, pxscale)
+    
+	############## Output array ###############################
+    out = {
+		'image' : field_image,
+		'galaxy' : galaxy,
+		'clumps' : clumps,
+		'all_xi' : all_xi,
+		'all_yi' : all_yi,
+	}
+    
+    return image_perfect, out, r_pet
 
 ####The following is to test the code#####	
 

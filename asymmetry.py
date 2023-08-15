@@ -5,6 +5,7 @@ from scipy import optimize as opt
 from skimage import transform as T
 from skimage import measure
 from scipy import fft
+from scipy.interpolate import griddata
 
 
 def _sky_properties(img, bg_size, a_type='cas'):
@@ -23,7 +24,7 @@ def _sky_properties(img, bg_size, a_type='cas'):
         sky_norm (int): average background normalization per pixel (<|sky|> or <sky^2>)
     """
 
-    assert a_type in ['cas', 'squared'], 'a_type should be "cas" or "squared"'
+    assert a_type in ['cas', 'squared', 'cas_corr'], 'a_type should be "cas" or "squared"'
 
     # Get the skybox and rotate it
     sky = img[:bg_size, :bg_size]
@@ -39,10 +40,43 @@ def _sky_properties(img, bg_size, a_type='cas'):
         sky_a = 10*np.sum((sky-sky_rotated)**2)
         sky_norm = np.mean(sky**2)
 
+    elif a_type == 'cas_corr':
+        sky_a = np.sum(np.abs(sky - sky_rotated))
+        sky_norm = np.mean(sky)
+    sky_std = np.std(sky)
+
     # Calculate per pixel
     sky_a /= sky_size
 
-    return sky_a, sky_norm
+    return sky_a, sky_norm, sky_std
+
+
+def _asymmetry_center(img, ap_size, sky_a, 
+                        a_type='cas_corr', e=0, theta=0,
+                        optimizer='Nelder-Mead', xtol=0.5, atol=0.1):
+    """Find the rotation center that minimizes asymmetry. 
+    To speed up, only use the skybox background, not the annulus.
+    Use the adaptive CAS asymmetry as it's the fastest.
+    """
+
+    # Initial guess for the A center: center of flux^2. 
+    # Note: usually center of flux is used instead. It is often a local maximum, so the optimizer
+    # can move towards a local minimum instead of the correct one. Center of flux^2 puts
+    # more weight on the central object and avoids placing the first guess on a local max.
+    M = measure.moments(img**2, order=2)
+    x0 = (M[0, 1] / M[0, 0], M[1, 0] / M[0, 0])
+
+    # Find the minimum of corrected |A|
+    res = opt.minimize(
+        
+        _asymmetry_func, x0=x0, method=optimizer,
+        options={
+            'xatol': xtol, 'fatol' : atol
+        },
+        args=(img, ap_size, a_type, 'skybox', sky_a, 0, None, 'residual', e, theta))
+    x0 = res.x
+    
+    return x0
 
 
 def _asymmetry_func(center, img, ap_size,
@@ -85,12 +119,9 @@ def _asymmetry_func(center, img, ap_size,
     """
 
     # Input checks
-    assert a_type in ['cas', 'squared'], 'a_type should be "cas" or "squared"'
+    assert a_type in ['cas', 'squared', 'cas_corr'], 'a_type should be "cas" or "squared"'
     assert bg_corr in ['none', 'residual', 'full'], 'bg_corr should be "none", "residual", or "full".'
     assert sky_type in ['skybox', 'annulus'], 'sky_type should be "skybox" or "annulus".'
-
-    # Calculate dx
-    dx = 1/(img.shape[0]*img.shape[1])
 
     # Rotate the image about asymmetry center
     img_rotated = T.rotate(img, 180, center=center, order=0)
@@ -107,52 +138,8 @@ def _asymmetry_func(center, img, ap_size,
     elif a_type == 'squared':
         total_flux = ap.do_photometry(img**2)[0][0]
         residual = 10*ap.do_photometry((img-img_rotated)**2)[0][0]
-
-
-    # Calculate sky asymmetry if sky_type is "annulus"
-    if sky_type == 'annulus':
-        ap_sky = phot.EllipticalAnnulus(
-            center, a_in=ap_size*sky_annulus[0], a_out=ap_size*sky_annulus[1],
-            b_out=ap_size*sky_annulus[1]*(1-e), theta=theta
-        )
-        sky_area = ap_sky.do_photometry(np.ones_like(img))[0][0]
-        if a_type =='cas':
-            sky_a = ap_sky.do_photometry(np.abs(img-img_rotated))[0][0] / sky_area
-            sky_norm = ap_sky.do_photometry(np.abs(img))[0][0] / sky_area
-        elif a_type == 'squared':
-            sky_a = 10*ap_sky.do_photometry((img-img_rotated)**2)[0][0] / sky_area
-            sky_norm = ap_sky.do_photometry(img**2)[0][0] / sky_area
-    
-    # Correct for the background
-    if bg_corr == 'none':
-        a = residual / total_flux
-    elif bg_corr == 'residual':
-        # print(residual, ap_area*sky_a, total_flux, ap_area*sky_norm)
-        a = (residual - ap_area*sky_a) / total_flux
-    elif bg_corr == 'full':
-        a = (residual - ap_area*sky_a) / (total_flux - ap_area*sky_norm)
-
-    return a
-
-
-
-def _asymmetry_fourier(center, img, psf, sky_a=None, sky_norm=None):
-    
-    # Rotate the image about asymmetry center
-    img_rotated = T.rotate(img, 180, center=center, order=0)
-
-    # Fourier transform image
-    img_fft = fft.fft2(img)
-    img_rot_fft = fft.fft2(img_rotated)
-    diff_fft = img_fft - img_rot_fft
-    fft_sum = np.sum( (im))
-
-    psf_fft = fft.fft2(fft.fftshift(psf))
-    psf_fft[(np.abs(psf_fft)) < 0.1] = 0.1
-
-
-    # Calculate asymmetry of the image
-        total_flux = ap.do_photometry(np.abs(img))[0][0]
+    elif a_type == 'cas_corr':
+        total_flux = ap.do_photometry(img)[0][0]
         residual = ap.do_photometry(np.abs(img-img_rotated))[0][0]
 
 
@@ -169,6 +156,9 @@ def _asymmetry_fourier(center, img, psf, sky_a=None, sky_norm=None):
         elif a_type == 'squared':
             sky_a = 10*ap_sky.do_photometry((img-img_rotated)**2)[0][0] / sky_area
             sky_norm = ap_sky.do_photometry(img**2)[0][0] / sky_area
+        elif a_type == 'cas_corr':
+            sky_a = ap_sky.do_photometry(np.abs(img-img_rotated))[0][0] / sky_area
+            sky_norm = ap_sky.do_photometry(img)[0][0] / sky_area
     
     # Correct for the background
     if bg_corr == 'none':
@@ -180,7 +170,6 @@ def _asymmetry_fourier(center, img, psf, sky_a=None, sky_norm=None):
         a = (residual - ap_area*sky_a) / (total_flux - ap_area*sky_norm)
 
     return a
-
 
 
 def get_asymmetry(
@@ -232,12 +221,7 @@ def get_asymmetry(
         sky_a = None
         sky_norm = None
 
-    # Initial guess for the A center: center of flux^2. 
-    # Note: usually center of flux is used instead. It is often a local maximum, so the optimizer
-    # can move towards a local minimum instead of the correct one. Center of flux^2 puts
-    # more weight on the central object and avoids placing the first guess on a local max.
-    M = measure.moments(img**2, order=2)
-    x0 = (M[0, 1] / M[0, 0], M[1, 0] / M[0, 0])
+    
     # res = opt.minimize(
         
     #     _asymmetry_func, x0=x0, method=optimizer,
@@ -255,7 +239,8 @@ def get_asymmetry(
 
     return a, center
 
-def get_residual(image, center, a_type):
+
+def get_residual(image, center, a_type): 
     """Utility function that rotates the image about the center and gets the residual
     according to an asymmetry definition given by a_type."""
 
@@ -267,5 +252,92 @@ def get_residual(image, center, a_type):
         return np.abs(residual)
     elif a_type == 'squared':
         return residual**2
+
+
+def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
+    """Given an FFT of an image and a noise level, estimate SNR(omega)
+    by interpolating high SNR regions and setting high-frequency SNR to 1k less than SNR max.
+    """
+    
+
+    # Calculate from the image SNR
+    snr = np.abs(img_fft) / noise_fft
+    snr_min = np.log10(np.max(snr)) - 3  # Minimum SNR is 1000 times dimmer than the center
+    
+    # Only look at one quarter of the array (FFT is reflected along x and y)
+    xc = int(img_fft.shape[0]/2)
+    snr_corner = snr[:xc, :xc]
+    
+    # Image x, y arrays as placeholders
+    xs = np.arange(xc+1)
+    XS, YS = np.meshgrid(xs, xs)
+    
+    
+    # Choose indices where SNR is high 
+    snr_lim = np.quantile(snr_corner, quant_thresh)
+    snr_lim = np.max([snr_lim, snr_thresh])
+    good_ids = np.nonzero(snr_corner > snr_lim)
+    good_log_snr = np.log10(snr_corner[good_ids])
+    
+    # Select regions dominated by noise and set their SNR to snr_min
+    noise_ids = np.nonzero(snr_corner < 0.5)   
+    noise_log_snr = snr_min*np.ones(len(noise_ids[0]))
+
+    # SNR array to interpolate
+    log_snr = np.concatenate((good_log_snr, noise_log_snr))
+    snr_ids = np.hstack((good_ids, noise_ids))
+    snr_ids = (snr_ids[0], snr_ids[1])
+    xs = XS[snr_ids]
+    ys = YS[snr_ids]
+
+    # Add a low SNR at highest frequency edges to help interpolation
+    boundaries = np.arange(xc+1)
+    xs = np.concatenate((xs, np.ones_like(boundaries)*xc, boundaries))
+    ys = np.concatenate((ys, boundaries, np.ones_like(boundaries)*xc))
+    log_snr = np.concatenate((log_snr, snr_min*np.ones_like(boundaries), snr_min*np.ones_like(boundaries)))
+
+    # Interpolate
+    snr_grid = griddata((xs, ys), log_snr, (XS, YS), method='linear')
+    
+
+    # Expand the grid (corner) back to the original shape by doubling in X and Y
+    fit_snr = np.ones_like(snr)
+    fit_snr[:xc,:xc] = snr_grid[:-1,:-1]
+    fit_snr[xc:,:xc] = snr_grid[::-1,:-1]
+    fit_snr[:xc,xc:] = snr_grid[:-1,::-1]
+    fit_snr[xc:,xc:] = snr_grid[::-1, ::-1]
+    
+    # Undo the log
+    fit_snr = np.power(10, fit_snr)
+
+    # Rewrite the good SNR regions with real values
+    good_ids = np.nonzero(snr > snr_lim)
+    fit_snr[good_ids] = snr[good_ids]
+    
+    return fit_snr
+
+def fourier_deconvolve(img, psf, noise):
+
+    # Transform the image and the PSF
+    img_fft = fft.fft2(img)
+    psf_fft = fft.fft2(fft.ifftshift(psf))
+    noise_fft = noise * img_fft.shape[0] 
+
+    # Get the SNR
+    snr = _fit_snr(img_fft, noise_fft)
+
+    # Deconvolve
+    H_sq = np.power((1 + 1/snr), 2) / np.power((np.abs(psf_fft) + 1/snr), 2)
+    H = np.sqrt(H_sq)
+    img_corr = img_fft * H
+
+    # Do an inverse transform
+    img_deconv = np.real(fft.ifft2(img_corr))
+
+    return img_deconv
+
+
+
+
 
 

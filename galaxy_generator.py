@@ -19,6 +19,8 @@ import matplotlib.pyplot as plt
 from importlib import resources as impresources
 import templates
 
+gsparams = galsim.GSParams(maximum_fft_size=20000)
+
 _default_clump_properties = {
 	'r' : (0.05, 0.8),
 	'flux' : (0.05, 0.5),
@@ -145,7 +147,7 @@ def gen_galaxy(mag, re, n, q, beta):
 	flux = uJy2galflux(uJy, eff_wav, del_wav, transmission) * t_exp * np.pi * (D*100./2)**2
 
 	# re is circular re, can then shear the galaxy with an axis ratio and angle
-	gal = galsim.Sersic(n=n, flux=flux, half_light_radius=re)
+	gal = galsim.Sersic(n=n, flux=flux, half_light_radius=re, gsparams=gsparams)
 	gal = gal.shear(q = q, beta=-1*beta*galsim.radians)
 
 	return gal

@@ -96,12 +96,12 @@ if __name__ == '__main__':
     lims = {
         'mag' : (10, 16),
         'sky_mag' : (20, 26),
-        'n_clumps' : (5, 30),
-        'psf_fwhm' : (0.4, 2),
-        'sersic_n' : (1, 3),
+        'n_clumps' : (5, 50),
+        'psf_fwhm' : (0.8, 3),
+        'sersic_n' : (1, 6),
     }
 
-    pxscale = 0.2
+    pxscale = 0.4
 
     # Generate parameters for n galaxies
     N = int(args.N)
@@ -114,8 +114,14 @@ if __name__ == '__main__':
     rs = -1.9*mags + 35 + stats.norm.rvs(loc=0, scale=1.5, size=N)
     betas = stats.uniform.rvs(loc=0, scale=2*np.pi, size=N)
 
+    # Fix radii
     rs[rs <= 1] = 1
     rs[rs >= 20] = 20
+
+    # Set q to above 0.5 where sersic index is high
+    q_ids = np.where((qs < 0.5) & (ns >= 4))
+    qs_new = stats.uniform.rvs(loc=0.5, scale=0.5, size=len(q_ids))
+    qs[q_ids] = qs_new
 
     ### Run the execution in parallel
     Parallel(n_jobs=num_cores)(delayed(single_galaxy_run)(

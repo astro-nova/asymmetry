@@ -98,7 +98,7 @@ if __name__ == '__main__':
         'sky_mag' : (20, 26),
         'n_clumps' : (5, 30),
         'psf_fwhm' : (0.4, 2),
-        'sersic_n' : (1, 4),
+        'sersic_n' : (1, 3),
     }
 
     pxscale = 0.2

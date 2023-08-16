@@ -279,7 +279,7 @@ def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
     good_log_snr = np.log10(snr_corner[good_ids])
     
     # Select regions dominated by noise and set their SNR to snr_min
-    noise_ids = np.nonzero(snr_corner < 0.5)   
+    noise_ids = np.nonzero(snr_corner < 1)   
     noise_log_snr = snr_min*np.ones(len(noise_ids[0]))
 
     # SNR array to interpolate

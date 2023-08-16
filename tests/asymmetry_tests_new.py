@@ -40,13 +40,16 @@ def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag
 
     ##### Generate the galaxy image
     # Generate galaxy model
+    print('-4')
     image_perfect, image_noisy, r_pet = make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, 21, pxscale, sersic_n, q, beta)
 
     # Calculate background asymmetry
+    print('-3')
     bgsize = int(0.1*image_noisy.shape[0]) # 10% of the image
     sky_a, sky_norm, sky_std = _sky_properties(image_noisy, bgsize, a_type='squared')
     
     # Calculate the centre of the squared asymmetry
+    print('-2')
     ap_size = ap_frac * r_pet / pxscale
     x0 = _asymmetry_center(image_noisy, ap_size, sky_a, a_type='squared')
     

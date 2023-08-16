@@ -40,7 +40,7 @@ def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag
     
     ##### Generate the galaxy image
     # Generate galaxy model. r_pet is in pixels
-    image_perfect, image_noisy, r_pet = make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, 21, pxscale, sersic_n, q, beta)
+    image_perfect, image_noisy, r_pet = make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, 13, pxscale, sersic_n, q, beta)
 
     # Calculate background asymmetry
     bgsize = int(0.1*image_noisy.shape[0]) # 10% of the image
@@ -96,13 +96,13 @@ if __name__ == '__main__':
     lims = {
         'mag' : (10, 16),
         'sky_mag' : (20, 26),
-        'n_clumps' : (5, 30),
-        'psf_fwhm' : (0.6, 2),
+        'n_clumps' : (5, 50),
+        'psf_fwhm' : (0.8, 3),
 
-        'sersic_n' : (1, 3),
+        'sersic_n' : (1, 6),
     }
 
-    pxscale = 0.3
+    pxscale = 0.4
 
     # Generate parameters for n galaxies
     N = int(args.N)

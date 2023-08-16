@@ -36,7 +36,7 @@ transmission_params = {'eff_wav':616.5, 'del_wav':137}
 def make_galaxy(mag, r_eff, psf_fwhm, sky_mag, fov_reff=21, pxscale=0.396, sersic_n=1, q=1, beta=0):
     
 
-    perfect_img, params, rpet = simuale_perfect_galaxy(mag=mag, r_eff=r_eff, pxscale=pxscale, fov=fov, sersic_n=sersic_n, 
+    perfect_img, params, rpet = simuale_perfect_galaxy(mag=mag, r_eff=r_eff, pxscale=pxscale, fov=fov_reff, sersic_n=sersic_n, 
                                                     q=q,beta=beta, n_clumps=n_clumps)
     
     image_psf = add_source_to_image(**params, psf_fwhm=psf_fwhm, pxscale=pxscale, psf_method="astropy")
@@ -123,7 +123,7 @@ if __name__ == '__main__':
     qs = stats.uniform.rvs(loc=0.2, scale=0.8, size=N)
     rs = -1.9*mags + 35 + stats.norm.rvs(loc=0, scale=1.5, size=N)
     betas = stats.uniform.rvs(loc=0, scale=2*np.pi, size=N)
-    
+
     rs[rs <= 1] = 1
     rs[rs >= 20] = 20
 

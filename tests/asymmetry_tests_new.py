@@ -37,37 +37,34 @@ def make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, fov_reff, pxscale, sers
 
 def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag, psf_fwhm, pxscale,
                       ap_frac=1.5, psf_err=0):
+    
+    print(mag, r_eff, sersic_n,q,beta, n_clumps,sky_mag, psf_fwhm, pxscale)
 
     ##### Generate the galaxy image
     # Generate galaxy model
-    print('-4')
     image_perfect, image_noisy, r_pet = make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, 21, pxscale, sersic_n, q, beta)
 
     # Calculate background asymmetry
-    print('-3')
     bgsize = int(0.1*image_noisy.shape[0]) # 10% of the image
     sky_a, sky_norm, sky_std = _sky_properties(image_noisy, bgsize, a_type='squared')
     
     # Calculate the centre of the squared asymmetry
-    print('-2')
     ap_size = ap_frac * r_pet / pxscale
-    x0 = _asymmetry_center(image_noisy, ap_size, sky_a, a_type='squared')
+    # TODO: THIS STEP IS SLOW
+    x0 = _asymmetry_center(image_noisy, ap_size, sky_a, a_type='squared')  
     
-    print('here-1')
     # Get snr
     ap_source = CircularAperture(x0, ap_size)
     snr = ap_source.do_photometry(image_perfect / sky_std)[0][0] / ap_source.area
-    
-    print('here0')
+
     # Deconvolve the image
     psf_fwhm = psf_fwhm + np.random.normal(loc=0, scale=psf_err) if psf_err > 0 else psf_fwhm
     psf_sigma = psf_fwhm  * gaussian_fwhm_to_sigma / pxscale
     psf = Gaussian2DKernel(psf_sigma, x_size=image_noisy.shape[1], y_size=image_noisy.shape[0])
     img_deconv = fourier_deconvolve(image_noisy, psf, sky_std)
 
-
-    print('here')
     ###### Calculate asymmetries
+    # TODO: THIS STEP IS VERY SLOW
     a_cas_real = _asymmetry_func(x0, image_perfect, ap_size, 'cas', 'annulus', bg_corr='residual')
     a_sq_real = _asymmetry_func(x0, image_perfect, ap_size, 'squared', 'annulus', bg_corr='residual')
     a_cas = _asymmetry_func(x0, image_noisy, ap_size, 'cas', 'annulus', bg_corr='residual')
@@ -75,8 +72,6 @@ def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag
     a_sq = _asymmetry_func(x0, image_noisy, ap_size, 'squared', 'annulus', bg_corr='full')
     a_fourier = _asymmetry_func(x0, img_deconv, ap_size, 'squared', 'annulus', bg_corr='full')
 
-
-    print('here2')
     ##### Store output
     output = {'a_cas_real' : a_cas_real, 'a_sq_real' : a_sq_real, 'a_cas' : a_cas, 'a_cas_cor' : a_cas_corr, 'a_sq' : a_sq, 'a_fourier' : a_fourier,
                'mag' : mag, 'psf_fwhm' : psf_fwhm, 'pxscale' : pxscale, 'snr' : snr, 'sky_mag' : sky_mag,

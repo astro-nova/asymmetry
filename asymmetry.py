@@ -75,7 +75,6 @@ def _asymmetry_center(img, ap_size, sky_a,
         },
         args=(img, ap_size, a_type, 'skybox', sky_a, 0, None, 'residual', e, theta))
     x0 = res.x
-    
     return x0
 
 
@@ -301,11 +300,13 @@ def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
     
 
     # Expand the grid (corner) back to the original shape by doubling in X and Y
+    j = -1 
+    k = -1 if (snr.shape[0] % 2 == 1) else -2
     fit_snr = np.ones_like(snr)
-    fit_snr[:xc,:xc] = snr_grid[:-1,:-1]
-    fit_snr[xc:,:xc] = snr_grid[::-1,:-1]
-    fit_snr[:xc,xc:] = snr_grid[:-1,::-1]
-    fit_snr[xc:,xc:] = snr_grid[::-1, ::-1]
+    fit_snr[:xc,:xc] = snr_grid[:j, :j]
+    fit_snr[xc:,:xc] = snr_grid[k::-1, :j]
+    fit_snr[:xc,xc:] = snr_grid[:j, k::-1]
+    fit_snr[xc:,xc:] = snr_grid[k::-1, k::-1]
     
     # Undo the log
     fit_snr = np.power(10, fit_snr)

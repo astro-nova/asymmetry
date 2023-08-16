@@ -26,7 +26,7 @@ num_cores = multiprocessing.cpu_count()
 def make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, fov_reff, pxscale, sersic_n, q, beta):
     
 
-    perfect_img, params, rpet = simuale_perfect_galaxy(mag=mag, r_eff=r_eff, pxscale=pxscale, fov_reff=fov_reff, sersic_n=sersic_n, 
+    perfect_img, params, rpet = simulate_perfect_galaxy(mag=mag, r_eff=r_eff, pxscale=pxscale, fov_reff=fov_reff, sersic_n=sersic_n, 
                                                     q=q,beta=beta, n_clumps=n_clumps)
     
     image_psf = add_source_to_image(**params, psf_fwhm=psf_fwhm, pxscale=pxscale, psf_method="astropy")

@@ -446,7 +446,7 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 
 	return image_psf
 
-def simuale_perfect_galaxy(mag, r_eff, pxscale, fov_reff=10, sersic_n=1, q=1, beta=0, n_clumps=10, clump_properties=None, random_clump_properties=None):
+def simulate_perfect_galaxy(mag, r_eff, pxscale, fov_reff=10, sersic_n=1, q=1, beta=0, n_clumps=10, clump_properties=None, random_clump_properties=None):
 
 	############## Sersic profile only #########################
     # Calculate field of view in degrees

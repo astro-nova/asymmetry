@@ -23,16 +23,6 @@ from astropy.convolution import Gaussian2DKernel
 
 num_cores = multiprocessing.cpu_count()
 
-
-##### Telescope parameters
-filt = 'r'
-bandpass_file = "../passband_sdss_" + filt
-bandpass = galsim.Bandpass(bandpass_file, wave_type = u.angstrom)
-## gain, exptime and diameter of telescope
-telescope_params = {'g':4.8, 't_exp':53.91, 'D':2.5}
-## effective wavelength and width of filter
-transmission_params = {'eff_wav':616.5, 'del_wav':137}
-
 def make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, fov_reff, pxscale, sersic_n, q, beta):
     
 

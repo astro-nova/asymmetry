@@ -261,7 +261,7 @@ def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
 
     # Calculate from the image SNR
     snr = np.abs(img_fft) / noise_fft
-    snr_min = np.log10(np.max(snr)) - 3  # Minimum SNR is 1000 times dimmer than the center
+    snr_min = np.log10(np.max(snr)) - 4  # Minimum SNR is 1000 times dimmer than the center
     
     # Only look at one quarter of the array (FFT is reflected along x and y)
     xc = int(img_fft.shape[0]/2)

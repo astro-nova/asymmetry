@@ -449,6 +449,7 @@ def simuale_perfect_galaxy(mag, r_eff, pxscale, fov_reff=10, sersic_n=1, q=1, be
     filt = 'r'
     bandpass_file = "passband_sdss_" + filt
     bandpass = galsim.Bandpass(bandpass_file, wave_type = u.angstrom)
+    print(bandpass)
     ## gain, exptime and diameter of telescope
     telescope_params = {'g':4.8, 't_exp':53.91, 'D':2.5}
     ## effective wavelength and width of filter

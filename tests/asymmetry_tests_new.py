@@ -38,8 +38,6 @@ def make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, fov_reff, pxscale, sers
 def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag, psf_fwhm, pxscale,
                       ap_frac=1.5, psf_err=0):
     
-    print(mag, r_eff, sersic_n,q,beta, n_clumps,sky_mag, psf_fwhm, pxscale)
-
     ##### Generate the galaxy image
     # Generate galaxy model. r_pet is in pixels
     image_perfect, image_noisy, r_pet = make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, 21, pxscale, sersic_n, q, beta)

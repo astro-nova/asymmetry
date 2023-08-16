@@ -291,8 +291,8 @@ def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
 
     # Add a low SNR at highest frequency edges to help interpolation
     boundaries = np.arange(xc+1)
-    xs = np.concatenate((xs, np.ones_like(boundaries)*xc, boundaries))
-    ys = np.concatenate((ys, boundaries, np.ones_like(boundaries)*xc))
+    xs = np.concatenate((xs, np.ones_like(boundaries)*(xc+1), boundaries))
+    ys = np.concatenate((ys, boundaries, np.ones_like(boundaries)*(xc+1)))
     log_snr = np.concatenate((log_snr, snr_min*np.ones_like(boundaries), snr_min*np.ones_like(boundaries)))
 
     # Interpolate

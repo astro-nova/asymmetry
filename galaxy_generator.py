@@ -16,13 +16,31 @@ from astropy.visualization import simple_norm
 import petrofit
 from astropy.modeling.functional_models import Gaussian2D
 import matplotlib.pyplot as plt
-
+from importlib import resources as impresources
+import templates
 
 _default_clump_properties = {
 	'r' : (0.05, 0.8),
 	'flux' : (0.05, 0.5),
 	'sigma' : (0.3, 5)
 }
+
+
+#################### SDSS set-up ###########################
+sdss_ra = 150
+sdss_dec = 2.3
+filt = 'r'
+bandpass_file = "passband_sdss_" + filt
+inp_file = (impresources.files(templates) / bandpass_file)
+throughput = galsim.LookupTable.from_file(inp_file)
+bandpass = galsim.Bandpass(throughput, wave_type = u.angstrom)
+## gain, exptime and diameter of telescope
+telescope_params = {'g':4.8, 't_exp':53.91, 'D':2.5}
+## effective wavelength and width of filter
+transmission_params = {'eff_wav':616.5, 'del_wav':137}
+g, t_exp, D = telescope_params['g'],telescope_params['t_exp'],telescope_params['D']
+transmission = bandpass(transmission_params['eff_wav'])
+#############################################################
 
 
 def mag2uJy(mag):
@@ -100,7 +118,7 @@ def gen_image(centre_ra, centre_dec, pixel_scale, fov_x, fov_y):
 	
 	return image, wcs
 
-def gen_galaxy(mag, re, n, q, beta, telescope_params, transmission_params, bandpass):
+def gen_galaxy(mag, re, n, q, beta):
 	"""
 	create a sersic profile galaxy with given mag, re, n, q, beta
 
@@ -150,24 +168,13 @@ def sky_noise(image_psf, sky_mag, pixel_scale, seed=None, rms_noise=False):
 	Returns:
 		image_noise (galsim object) : image_psf + addded noise (image_psf is preserved due to copying)
 	"""
-	telescope_params = {'g':4.8, 't_exp':53.91, 'D':2.5}
-    ## effective wavelength and width of filter
-	transmission_params = {'eff_wav':616.5, 'del_wav':137}
-	filt = 'r'
-	bandpass_file = "passband_sdss_" + filt
-	bandpass = galsim.Bandpass(bandpass_file, wave_type = u.angstrom)
-	g, t_exp, D = telescope_params['g'],telescope_params['t_exp'],telescope_params['D']
-	eff_wav, del_wav = transmission_params['eff_wav'],transmission_params['del_wav']
-
-	transmission = bandpass(transmission_params['eff_wav'])
 
 	sky_uJy = mag2uJy(sky_mag)*pixel_scale*pixel_scale
-	sky_electrons = uJy2galflux(sky_uJy, eff_wav, del_wav, transmission) * t_exp * np.pi * (D*100./2)**2
+	sky_electrons = uJy2galflux(sky_uJy, transmission_params['eff_wav'], 
+			     transmission_params['del_wav'], transmission) * t_exp * np.pi * (D*100./2)**2
 
 	# If noise is given as background rms instead of background brightness
 	if rms_noise: sky_electrons = sky_electrons**2
-
-	
 
 	# copy image in case iterating over and changing noise level
 	if 'galsim' in str(type(image_psf)):
@@ -220,8 +227,7 @@ def petrosian_sersic(fov, re, n):
 	R_p2 = R_vals[np.argmin(np.abs(R_p2_array-0.2))]
 	return R_p2
 
-def create_clumps(image, rp, N,  gal_mag, telescope_params, transmission_params, bandpass,
-				  clump_properties=None, random_clump_properties=None, seed=None):
+def create_clumps(image, rp, N,  gal_mag, clump_properties=None, random_clump_properties=None, seed=None):
 	"""Create gaussian clumps to add to galaxy image to simulate intrinsic asymmetry.
 
 	Args:
@@ -440,20 +446,8 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 
 	return image_psf
 
-
-
 def simuale_perfect_galaxy(mag, r_eff, pxscale, fov_reff=10, sersic_n=1, q=1, beta=0, n_clumps=10, clump_properties=None, random_clump_properties=None):
-	#################### SDSS set-up ###########################
-    sdss_ra = 150
-    sdss_dec = 2.3
-    filt = 'r'
-    bandpass_file = "../passband_sdss_" + filt
-    bandpass = galsim.Bandpass(bandpass_file, wave_type = u.angstrom)
-    ## gain, exptime and diameter of telescope
-    telescope_params = {'g':4.8, 't_exp':53.91, 'D':2.5}
-    ## effective wavelength and width of filter
-    transmission_params = {'eff_wav':616.5, 'del_wav':137}
-    
+
 	############## Sersic profile only #########################
     # Calculate field of view in degrees
     fov = fov_reff * r_eff / 3600
@@ -462,16 +456,14 @@ def simuale_perfect_galaxy(mag, r_eff, pxscale, fov_reff=10, sersic_n=1, q=1, be
     field_image, wcs = gen_image(sdss_ra, sdss_dec, pxscale, fov, fov)
 
     # create a galaxy with given params
-    galaxy = gen_galaxy(mag=mag, re=r_eff, n=sersic_n, q=q, beta=beta, telescope_params=telescope_params, 
-                        transmission_params=transmission_params, bandpass=bandpass)
+    galaxy = gen_galaxy(mag=mag, re=r_eff, n=sersic_n, q=q, beta=beta)
     
     # get petrosian radius of galaxy in px
     r_pet = petrosian_sersic(fov, r_eff, 1)/pxscale
     
     ############## Asymmetry clumps ############################
      # generate all the clumps and their positions
-    clumps, all_xi, all_yi = create_clumps(field_image, r_pet, n_clumps, mag, telescope_params, transmission_params, bandpass,
-                                           clump_properties, random_clump_properties)
+    clumps, all_xi, all_yi = create_clumps(field_image, r_pet, n_clumps, mag, clump_properties, random_clump_properties)
     
 	############## Perfect image ###############################
     image_perfect = add_source_to_image(field_image, galaxy, clumps, all_xi, all_yi, 0, pxscale)

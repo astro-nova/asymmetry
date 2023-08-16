@@ -261,7 +261,7 @@ def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
 
     # Calculate from the image SNR
     snr = np.abs(img_fft) / noise_fft
-    snr_min = np.log10(np.max(snr)) - 3  # Minimum SNR is 1000 times dimmer than the center
+    snr_min = np.log10(np.max(snr)) - 4  # Minimum SNR is 1000 times dimmer than the center
     
     # Only look at one quarter of the array (FFT is reflected along x and y)
     xc = int(img_fft.shape[0]/2)
@@ -279,7 +279,7 @@ def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
     good_log_snr = np.log10(snr_corner[good_ids])
     
     # Select regions dominated by noise and set their SNR to snr_min
-    noise_ids = np.nonzero(snr_corner < 0.5)   
+    noise_ids = np.nonzero(snr_corner < 1)   
     noise_log_snr = snr_min*np.ones(len(noise_ids[0]))
 
     # SNR array to interpolate
@@ -291,8 +291,8 @@ def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
 
     # Add a low SNR at highest frequency edges to help interpolation
     boundaries = np.arange(xc+1)
-    xs = np.concatenate((xs, np.ones_like(boundaries)*xc, boundaries))
-    ys = np.concatenate((ys, boundaries, np.ones_like(boundaries)*xc))
+    xs = np.concatenate((xs, np.ones_like(boundaries)*(xc+1), boundaries))
+    ys = np.concatenate((ys, boundaries, np.ones_like(boundaries)*(xc+1)))
     log_snr = np.concatenate((log_snr, snr_min*np.ones_like(boundaries), snr_min*np.ones_like(boundaries)))
 
     # Interpolate

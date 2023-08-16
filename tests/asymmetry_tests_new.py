@@ -50,10 +50,12 @@ def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag
     ap_size = ap_frac * r_pet / pxscale
     x0 = _asymmetry_center(image_noisy, ap_size, sky_a, a_type='squared')
     
+    print('here-1')
     # Get snr
     ap_source = CircularAperture(x0, ap_size)
     snr = ap_source.do_photometry(image_perfect / sky_std)[0][0] / ap_source.area
     
+    print('here0')
     # Deconvolve the image
     psf_fwhm = psf_fwhm + np.random.normal(loc=0, scale=psf_err) if psf_err > 0 else psf_fwhm
     psf_sigma = psf_fwhm  * gaussian_fwhm_to_sigma / pxscale
@@ -61,6 +63,7 @@ def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag
     img_deconv = fourier_deconvolve(image_noisy, psf, sky_std)
 
 
+    print('here')
     ###### Calculate asymmetries
     a_cas_real = _asymmetry_func(x0, image_perfect, ap_size, 'cas', 'annulus', bg_corr='residual')
     a_sq_real = _asymmetry_func(x0, image_perfect, ap_size, 'squared', 'annulus', bg_corr='residual')
@@ -70,6 +73,7 @@ def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag
     a_fourier = _asymmetry_func(x0, img_deconv, ap_size, 'squared', 'annulus', bg_corr='full')
 
 
+    print('here2')
     ##### Store output
     output = {'a_cas_real' : a_cas_real, 'a_sq_real' : a_sq_real, 'a_cas' : a_cas, 'a_cas_cor' : a_cas_corr, 'a_sq' : a_sq, 'a_fourier' : a_fourier,
                'mag' : mag, 'psf_fwhm' : psf_fwhm, 'pxscale' : pxscale, 'snr' : snr, 'sky_mag' : sky_mag,

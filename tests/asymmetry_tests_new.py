@@ -14,7 +14,7 @@ import galsim
 
 # from asymmetry import get_asymmetry
 sys.path.append('../')
-from galaxy_generator import simuale_perfect_galaxy, add_source_to_image, sky_noise
+from galaxy_generator import simulate_perfect_galaxy, add_source_to_image, sky_noise
 from asymmetry import _asymmetry_func, fourier_deconvolve, _asymmetry_center, _sky_properties
 from astropy.stats import gaussian_fwhm_to_sigma
 from astropy.convolution import Gaussian2DKernel
@@ -71,7 +71,7 @@ def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag
 
 
     ##### Store output
-    output = {'a_cas_real' : a_cas_real, 'a_sq_real' : a_sq_real, 'a_cas' : a_cas, 'a_sq' : a_sq, 'a_fourier' : a_fourier,
+    output = {'a_cas_real' : a_cas_real, 'a_sq_real' : a_sq_real, 'a_cas' : a_cas, 'a_cas_cor' : a_cas_corr, 'a_sq' : a_sq, 'a_fourier' : a_fourier,
                'mag' : mag, 'psf_fwhm' : psf_fwhm, 'pxscale' : pxscale, 'snr' : snr, 'sky_mag' : sky_mag,
               'r_eff' : r_eff, 'r_pet' : r_pet, 'sersic_n' : sersic_n, 'q' : q, 'beta' : beta, 'n_clumps' : n_clumps}
 

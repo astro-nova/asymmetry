@@ -41,7 +41,7 @@ def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag
     print(mag, r_eff, sersic_n,q,beta, n_clumps,sky_mag, psf_fwhm, pxscale)
 
     ##### Generate the galaxy image
-    # Generate galaxy model
+    # Generate galaxy model. r_pet is in pixels
     image_perfect, image_noisy, r_pet = make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, 21, pxscale, sersic_n, q, beta)
 
     # Calculate background asymmetry
@@ -49,7 +49,7 @@ def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag
     sky_a, sky_norm, sky_std = _sky_properties(image_noisy, bgsize, a_type='squared')
     
     # Calculate the centre of the squared asymmetry
-    ap_size = ap_frac * r_pet / pxscale
+    ap_size = ap_frac * r_pet 
     # TODO: THIS STEP IS SLOW
     x0 = _asymmetry_center(image_noisy, ap_size, sky_a, a_type='squared')  
     

@@ -33,7 +33,7 @@ telescope_params = {'g':4.8, 't_exp':53.91, 'D':2.5}
 ## effective wavelength and width of filter
 transmission_params = {'eff_wav':616.5, 'del_wav':137}
 
-def make_galaxy(mag, r_eff, psf_fwhm, sky_mag, fov_reff=21, pxscale=0.396, sersic_n=1, q=1, beta=0):
+def make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, fov_reff, pxscale, sersic_n, q, beta):
     
 
     perfect_img, params, rpet = simuale_perfect_galaxy(mag=mag, r_eff=r_eff, pxscale=pxscale, fov_reff=fov_reff, sersic_n=sersic_n, 
@@ -50,7 +50,7 @@ def single_galaxy_run(filepath, mag, r_eff, sersic_n, q, beta, n_clumps, sky_mag
 
     ##### Generate the galaxy image
     # Generate galaxy model
-    image_perfect, image_noisy, r_pet = make_galaxy(mag, r_eff, psf_fwhm, sky_mag, 21, pxscale, sersic_n, q, beta)
+    image_perfect, image_noisy, r_pet = make_galaxy(mag, r_eff, psf_fwhm, sky_mag, n_clumps, 21, pxscale, sersic_n, q, beta)
 
     # Calculate background asymmetry
     bgsize = int(0.1*image_noisy.shape[0]) # 10% of the image

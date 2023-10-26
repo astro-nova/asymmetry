@@ -22,7 +22,7 @@ import templates
 gsparams = galsim.GSParams(maximum_fft_size=20000)
 
 _default_clump_properties = {
-	'r' : (0.05, 0.8),
+	'r' : (0.1, 0.8),
 	'flux' : (0.05, 0.5),
 	'sigma' : (0.3, 5)
 }

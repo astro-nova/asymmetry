@@ -6,49 +6,68 @@ from skimage import transform as T
 from skimage import measure
 from scipy import fft
 from scipy.interpolate import griddata
+from astropy.stats import sigma_clipped_stats
+from astropy.convolution import Gaussian2DKernel
 
 
-def _sky_properties(img, bg_size, a_type='cas'):
-    """Calculates the sky asymmetry and flux.
-    IN PROGRESS: right now, just draws a sky box in the bottom-left corner. 
-    The "rotated" background is simply reflected, works for a Gaussian case.
-    TODO: estimate bg asymmetry properly.
+# def _sky_properties(img, bg_size, a_type='cas'):
+#     """Calculates the sky asymmetry and flux.
+#     IN PROGRESS: right now, just draws a sky box in the bottom-left corner. 
+#     The "rotated" background is simply reflected, works for a Gaussian case.
+#     TODO: estimate bg asymmetry properly.
 
-    Args:
-        img (np.array): an NxN image array
-        bg_size (int): size of the square skybox
-        a_type (str): formula to use, 'cas' or 'squared'
+#     Args:
+#         img (np.array): an NxN image array
+#         bg_size (int): size of the square skybox
+#         a_type (str): formula to use, 'cas' or 'squared'
 
-    Returns:
-        sky_a (int): asymmetry of the background per pixel
-        sky_norm (int): average background normalization per pixel (<|sky|> or <sky^2>)
-    """
+#     Returns:
+#         sky_a (int): asymmetry of the background per pixel
+#         sky_norm (int): average background normalization per pixel (<|sky|> or <sky^2>)
+#     """
 
-    assert a_type in ['cas', 'squared', 'cas_corr'], 'a_type should be "cas" or "squared"'
+#     assert a_type in ['cas', 'squared', 'cas_corr'], 'a_type should be "cas" or "squared"'
 
-    # Get the skybox and rotate it
-    sky = img[:bg_size, :bg_size]
-    sky_rotated = sky[::-1]
-    sky_size = sky.shape[0]*sky.shape[1]
+#     # Get the skybox and rotate it
+#     sky = img[:bg_size, :bg_size]
+#     sky_rotated = sky[::-1]
+#     sky_size = sky.shape[0]*sky.shape[1]
 
-    # Calculate asymmetry in the skybox
+#     # Calculate asymmetry in the skybox
+#     if a_type == 'cas':
+#         sky_a = np.sum(np.abs(sky - sky_rotated))
+#         sky_norm = np.mean(np.abs(sky))
+
+#     elif a_type == 'squared':
+#         sky_a = 10*np.sum((sky-sky_rotated)**2)
+#         sky_norm = np.mean(sky**2)
+
+#     elif a_type == 'cas_corr':
+#         sky_a = np.sum(np.abs(sky - sky_rotated))
+#         sky_norm = np.mean(sky)
+#     sky_std = np.std(sky)
+
+#     # Calculate per pixel
+#     sky_a /= sky_size
+
+#     return sky_a, sky_norm, sky_std
+
+def _sky_properties(img, mask, a_type='cas'):
+    
+    bgmean, bgmed, bgsd = sigma_clipped_stats(img, mask=mask)
     if a_type == 'cas':
-        sky_a = np.sum(np.abs(sky - sky_rotated))
-        sky_norm = np.mean(np.abs(sky))
-
-    elif a_type == 'squared':
-        sky_a = 10*np.sum((sky-sky_rotated)**2)
-        sky_norm = np.mean(sky**2)
-
+        sky_a = 1.6*bgsd
+        sky_norm = 0.8*bgsd 
     elif a_type == 'cas_corr':
-        sky_a = np.sum(np.abs(sky - sky_rotated))
-        sky_norm = np.mean(sky)
-    sky_std = np.std(sky)
+        sky_a = 1.6*bgsd
+        sky_norm = 0
+    elif a_type == 'squared':
+        sky_a = 20*bgsd**2
+        sky_norm = bgsd**2
+    return sky_a, sky_norm, bgsd
 
-    # Calculate per pixel
-    sky_a /= sky_size
 
-    return sky_a, sky_norm, sky_std
+
 
 
 def _asymmetry_center(img, ap_size, sky_a, 
@@ -78,9 +97,9 @@ def _asymmetry_center(img, ap_size, sky_a,
     return x0
 
 
-def _asymmetry_func(center, img, ap_size,
+def _asymmetry_func(center, img, ap_size, mask=None,
         a_type='cas', sky_type='skybox', sky_a=None, sky_norm=None, 
-        sky_annulus=(1.5, 2), bg_corr='full',
+        sky_annulus=(1.5, 3), bg_corr='full',
         e=0, theta=0
     ):
     """Calculate asymmetry of the image rotated 180 degrees about a given
@@ -123,23 +142,25 @@ def _asymmetry_func(center, img, ap_size,
     assert sky_type in ['skybox', 'annulus'], 'sky_type should be "skybox" or "annulus".'
 
     # Rotate the image about asymmetry center
-    img_rotated = T.rotate(img, 180, center=center, order=0)
+    img_rotated = T.rotate(img, 180, center=center, order=3)
+    mask_rotated = T.rotate(mask, 180, center=center, order=0)
+    mask = mask.astype(bool) | mask_rotated.astype(bool)
 
     # Define the aperture
     ap = phot.EllipticalAperture(
         center, a=ap_size, b=ap_size*(1-e), theta=theta)
-    ap_area = ap.do_photometry(np.ones_like(img))[0][0]
+    ap_area = ap.do_photometry(np.ones_like(img), mask=mask)[0][0]
 
     # Calculate asymmetry of the image
     if a_type == 'cas':
-        total_flux = ap.do_photometry(np.abs(img))[0][0]
-        residual = ap.do_photometry(np.abs(img-img_rotated))[0][0]
+        total_flux = ap.do_photometry(np.abs(img), mask=mask)[0][0]
+        residual = ap.do_photometry(np.abs(img-img_rotated), mask=mask)[0][0]
     elif a_type == 'squared':
-        total_flux = ap.do_photometry(img**2)[0][0]
-        residual = 10*ap.do_photometry((img-img_rotated)**2)[0][0]
+        total_flux = ap.do_photometry(img**2, mask=mask)[0][0]
+        residual = 10*ap.do_photometry((img-img_rotated)**2, mask=mask)[0][0]
     elif a_type == 'cas_corr':
-        total_flux = ap.do_photometry(img)[0][0]
-        residual = ap.do_photometry(np.abs(img-img_rotated))[0][0]
+        total_flux = ap.do_photometry(img, mask=mask)[0][0]
+        residual = ap.do_photometry(np.abs(img-img_rotated), mask=mask)[0][0]
 
 
     # Calculate sky asymmetry if sky_type is "annulus"
@@ -148,16 +169,17 @@ def _asymmetry_func(center, img, ap_size,
             center, a_in=ap_size*sky_annulus[0], a_out=ap_size*sky_annulus[1],
             b_out=ap_size*sky_annulus[1]*(1-e), theta=theta
         )
-        sky_area = ap_sky.do_photometry(np.ones_like(img))[0][0]
+        sky_area = ap_sky.do_photometry(np.ones_like(img), mask=mask)[0][0]
         if a_type =='cas':
-            sky_a = ap_sky.do_photometry(np.abs(img-img_rotated))[0][0] / sky_area
-            sky_norm = ap_sky.do_photometry(np.abs(img))[0][0] / sky_area
+            sky_a = ap_sky.do_photometry(np.abs(img-img_rotated), mask=mask)[0][0] / sky_area
+            sky_norm = ap_sky.do_photometry(np.abs(img), mask=mask)[0][0] / sky_area
         elif a_type == 'squared':
-            sky_a = 10*ap_sky.do_photometry((img-img_rotated)**2)[0][0] / sky_area
-            sky_norm = ap_sky.do_photometry(img**2)[0][0] / sky_area
+            sky_a = 10*ap_sky.do_photometry((img-img_rotated)**2, mask=mask)[0][0] / sky_area
+            sky_norm = ap_sky.do_photometry(img**2, mask=mask)[0][0] / sky_area
         elif a_type == 'cas_corr':
-            sky_a = ap_sky.do_photometry(np.abs(img-img_rotated))[0][0] / sky_area
-            sky_norm = ap_sky.do_photometry(img)[0][0] / sky_area
+            sky_a = ap_sky.do_photometry(np.abs(img-img_rotated), mask=mask)[0][0] / sky_area
+            sky_norm = ap_sky.do_photometry(img, mask=mask)[0][0] / sky_area
+
     
     # Correct for the background
     if bg_corr == 'none':
@@ -172,8 +194,8 @@ def _asymmetry_func(center, img, ap_size,
 
 
 def get_asymmetry(
-        img, ap_size, a_type='cas', 
-        sky_type='skybox', bg_size=50, sky_annulus=(1.5,2), bg_corr='residual', 
+        img, ap_size, mask=None, a_type='cas', 
+        sky_type='skybox', bg_size=50, sky_annulus=(1.5,3), bg_corr='residual', 
         e=0, theta=0, 
         optimizer='Nelder-Mead', xtol=0.5, atol=0.1
     ):
@@ -214,27 +236,26 @@ def get_asymmetry(
     # TODO: add desired tolerance as an input parameter
 
     # Calculate the background asymmetry and normalization
-    if sky_type == 'skybox':
-        sky_a, sky_norm = _sky_properties(img, bg_size, a_type)
-    else:
-        sky_a = None
-        sky_norm = None
+    sky_a, sky_norm, bgsd = _sky_properties(img, mask, a_type)
 
-    
-    # res = opt.minimize(
-        
-    #     _asymmetry_func, x0=x0, method=optimizer,
-    #     options={
-    #         'xatol': xtol, 'fatol' : atol
-    #     },
-    #     args=(img, ap_size, a_type, sky_type, sky_a, sky_norm, sky_annulus, bg_corr, e, theta))
 
-    # a = res.fun
-    # center = res.x
 
     x0 = np.array([img.shape[1]/2, img.shape[0]/2], dtype=int)
-    a = _asymmetry_func(x0, img, ap_size, a_type, sky_type, sky_a, sky_norm, sky_annulus, bg_corr, e, theta)
-    center = x0
+    res = opt.minimize(
+        
+        _asymmetry_func, x0=x0, method=optimizer,
+        options={
+            'xatol': xtol, 'fatol' : atol
+        },
+        args=(img, ap_size, mask, a_type, 'skybox', sky_a, sky_norm, 0, bg_corr, e, theta))
+
+
+    a = _asymmetry_func(res.x, img, ap_size, mask, a_type, sky_type, sky_a, sky_norm, sky_annulus, bg_corr, e, theta)
+    center = res.x
+
+    # x0 = np.array([img.shape[1]/2, img.shape[0]/2], dtype=int)
+    # a = _asymmetry_func(x0, img, ap_size, a_type, sky_type, sky_a, sky_norm, sky_annulus, bg_corr, e, theta)
+    # center = x0
 
     return a, center
 
@@ -253,11 +274,19 @@ def get_residual(image, center, a_type):
         return residual**2
 
 
-def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
+def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.99):
     """Given an FFT of an image and a noise level, estimate SNR(omega)
     by interpolating high SNR regions and setting high-frequency SNR to 1k less than SNR max.
     """
     
+    # noise_fft = np.max(np.abs(img_fft))/100
+    mid = int(img_fft.shape[0]/2)
+    window = int(0.2*img_fft.shape[0])
+    noise_fft = np.max( [
+        np.mean(np.abs(img_fft[0, mid-window:mid+window])),
+        np.mean(np.abs(img_fft[mid-window:mid+window, :]))
+    ] )
+    # noise_fft = sigma_clipped_stats(np.abs(img_fft))[2]*2
 
     # Calculate from the image SNR
     snr = np.abs(img_fft) / noise_fft
@@ -317,24 +346,35 @@ def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
     
     return fit_snr
 
-def fourier_deconvolve(img, psf, noise):
+def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
+
+    img = np.pad(img, (20,20))
+    psf = np.pad(psf, (20,20))
 
     # Transform the image and the PSF
     img_fft = fft.fft2(img)
-    psf_fft = fft.fft2(fft.ifftshift(psf))
+    # psf_fft = fft.fft2(fft.ifftshift(psf))
+    psf_fft = fft.fft2(psf)
     noise_fft = noise * img_fft.shape[0] 
 
     # Get the SNR
     snr = _fit_snr(img_fft, noise_fft)
 
+    # If True, convolve down to Nyquist frequency
+    if convolve_nyquist:
+        nyquist_psf = Gaussian2DKernel(0.8, x_size=img.shape[1], y_size=img.shape[0])
+        nyquist_fft = fft.fft2(fft.ifftshift(nyquist_psf))
+    else:
+        nyquist_fft = 1
     # Deconvolve
-    H_sq = np.power((1 + 1/snr), 2) / np.power((np.abs(psf_fft) + 1/snr), 2)
+    H_sq = np.power((np.abs(nyquist_fft) + 1/snr), 2) / np.power((np.abs(psf_fft) + 1/snr), 2)
     H = np.sqrt(H_sq)
     img_corr = img_fft * H
 
     # Do an inverse transform
     img_deconv = np.real(fft.ifft2(img_corr))
 
+    img_deconv = img_deconv[20:-20, 20:-20]
     return img_deconv
 
 

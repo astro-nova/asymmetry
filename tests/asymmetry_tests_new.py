@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 from joblib import Parallel, delayed
 import multiprocessing
+from skimage.transform import rescale
 
 from astropy import units as u
 from photutils.aperture import EllipticalAperture, CircularAnnulus, CircularAperture, ApertureStats
@@ -112,6 +113,9 @@ if __name__ == '__main__':
     qs = stats.uniform.rvs(loc=0.2, scale=0.8, size=N)
     rs = -1.9*mags + 35 + stats.norm.rvs(loc=0, scale=1.5, size=N)
     betas = stats.uniform.rvs(loc=0, scale=2*np.pi, size=N)
+    pxscales = stats.uniform.rvs(loc=0.1, scale=0.5, size=N)
+    for i in range(N):
+        pxscales[i] = min(pxscales[i], psfs[i]/2)
 
     # Fix radii
     rs[rs <= 1] = 1
@@ -126,7 +130,7 @@ if __name__ == '__main__':
     Parallel(n_jobs=num_cores)(delayed(single_galaxy_run)(
         filepath=f'{args.path}/{i}.pkl', mag=mags[i], r_eff=rs[i], sersic_n=ns[i],
         q=qs[i], beta=betas[i], n_clumps=n_clumps[i], sky_mag=sky_mags[i], psf_fwhm=psfs[i],
-        pxscale=pxscale, ap_frac=1.5, psf_err=0
+        pxscale=pxscales[i], ap_frac=1.5, psf_err=0
     ) for i in tqdm(range(N), total=N) )
 
 

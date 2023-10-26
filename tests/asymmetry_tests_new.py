@@ -94,14 +94,13 @@ if __name__ == '__main__':
 
     ## Range of values to try
     lims = {
-        'mag' : (10, 16),
+        'mag' : (11, 18),
         'sky_mag' : (20, 26),
         'n_clumps' : (5, 50),
-        'psf_fwhm' : (0.8, 3),
+        'psf_fwhm' : (0.2, 3),
         'sersic_n' : (1, 6),
+        'pxscale' : (0.1, 0.5)
     }
-
-    pxscale = 0.4
 
     # Generate parameters for n galaxies
     N = int(args.N)

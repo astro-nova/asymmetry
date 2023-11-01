@@ -274,23 +274,89 @@ def get_residual(image, center, a_type):
         return residual**2
 
 
-def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.99):
+# def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.99):
+#     """Given an FFT of an image and a noise level, estimate SNR(omega)
+#     by interpolating high SNR regions and setting high-frequency SNR to 1k less than SNR max.
+#     """
+    
+#     # noise_fft = np.max(np.abs(img_fft))/100
+#     # mid = int(img_fft.shape[0]/2)
+#     # window = int(0.2*img_fft.shape[0])
+#     # noise_fft = np.max( [
+#     #     np.mean(np.abs(img_fft[0, mid-window:mid+window])),
+#     #     np.mean(np.abs(img_fft[mid-window:mid+window, :]))
+#     # ] )
+
+#     # noise_fft = sigma_clipped_stats(np.abs(img_fft))[2]
+
+#     # Calculate from the image SNR
+#     snr = np.abs(img_fft) / noise_fft
+#     snr_min = np.log10(np.max(snr)) - 4  # Minimum SNR is 1000 times dimmer than the center
+    
+#     # Only look at one quarter of the array (FFT is reflected along x and y)
+#     xc = int(img_fft.shape[0]/2)
+#     snr_corner = snr[:xc, :xc]
+    
+#     # Image x, y arrays as placeholders
+#     xs = np.arange(xc+1)
+#     XS, YS = np.meshgrid(xs, xs)
+    
+    
+#     # Choose indices where SNR is high 
+#     snr_lim = np.quantile(snr_corner, quant_thresh)
+#     snr_lim = np.max([snr_lim, snr_thresh])
+#     good_ids = np.nonzero(snr_corner > snr_lim)
+#     good_log_snr = np.log10(snr_corner[good_ids])
+    
+#     # Select regions dominated by noise and set their SNR to snr_min
+#     # noise_ids = np.nonzero(snr_corner < 1)   
+#     # noise_log_snr = snr_min*np.ones(len(noise_ids[0]))
+
+#     # SNR array to interpolate
+#     log_snr = good_log_snr# np.concatenate((good_log_snr, noise_log_snr))
+#     snr_ids = good_ids#np.hstack((good_ids, noise_ids))
+#     snr_ids = (snr_ids[0], snr_ids[1])
+#     xs = XS[snr_ids]
+#     ys = YS[snr_ids]
+
+#     # Add a low SNR at highest frequency edges to help interpolation
+#     boundaries = np.arange(xc+1)
+#     xs = np.concatenate((xs, np.ones_like(boundaries)*(xc+1), boundaries))
+#     ys = np.concatenate((ys, boundaries, np.ones_like(boundaries)*(xc+1)))
+#     log_snr = np.concatenate((log_snr, snr_min*np.ones_like(boundaries), snr_min*np.ones_like(boundaries)))
+
+#     # Interpolate
+#     snr_grid = griddata((xs, ys), log_snr, (XS, YS), method='linear')
+    
+
+#     # Expand the grid (corner) back to the original shape by doubling in X and Y
+#     j = -1 
+#     k = -1 if (snr.shape[0] % 2 == 1) else -2
+#     fit_snr = np.ones_like(snr)
+#     fit_snr[:xc,:xc] = snr_grid[:j, :j]
+#     fit_snr[xc:,:xc] = snr_grid[k::-1, :j]
+#     fit_snr[:xc,xc:] = snr_grid[:j, k::-1]
+#     fit_snr[xc:,xc:] = snr_grid[k::-1, k::-1]
+    
+#     # Undo the log
+#     fit_snr = np.power(10, fit_snr)
+
+#     # Rewrite the good SNR regions with real values
+#     good_ids = np.nonzero(snr > snr_lim)
+#     fit_snr[good_ids] = snr[good_ids]
+    
+#     return fit_snr
+
+
+def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
     """Given an FFT of an image and a noise level, estimate SNR(omega)
     by interpolating high SNR regions and setting high-frequency SNR to 1k less than SNR max.
     """
     
-    # noise_fft = np.max(np.abs(img_fft))/100
-    mid = int(img_fft.shape[0]/2)
-    window = int(0.2*img_fft.shape[0])
-    noise_fft = np.max( [
-        np.mean(np.abs(img_fft[0, mid-window:mid+window])),
-        np.mean(np.abs(img_fft[mid-window:mid+window, :]))
-    ] )
-    # noise_fft = sigma_clipped_stats(np.abs(img_fft))[2]*2
 
     # Calculate from the image SNR
     snr = np.abs(img_fft) / noise_fft
-    snr_min = np.log10(np.max(snr)) - 4  # Minimum SNR is 1000 times dimmer than the center
+    snr_min = np.log10(np.max(snr)) - 4  # Minimum SNR is 100000 times dimmer than the center
     
     # Only look at one quarter of the array (FFT is reflected along x and y)
     xc = int(img_fft.shape[0]/2)
@@ -299,7 +365,6 @@ def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.99):
     # Image x, y arrays as placeholders
     xs = np.arange(xc+1)
     XS, YS = np.meshgrid(xs, xs)
-    
     
     # Choose indices where SNR is high 
     snr_lim = np.quantile(snr_corner, quant_thresh)
@@ -346,15 +411,15 @@ def _fit_snr(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.99):
     
     return fit_snr
 
-def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
+def fourier_deconvolve(img, psf, noise, pxscale, convolve_nyquist=False):
 
-    img = np.pad(img, (20,20))
-    psf = np.pad(psf, (20,20))
+    # img = np.pad(img, (20,20))
+    # psf = np.pad(psf, (20,20))
 
     # Transform the image and the PSF
     img_fft = fft.fft2(img)
-    # psf_fft = fft.fft2(fft.ifftshift(psf))
-    psf_fft = fft.fft2(psf)
+    psf_fft = fft.fft2(fft.ifftshift(psf))
+    # psf_fft = fft.fft2(psf)
     noise_fft = noise * img_fft.shape[0] 
 
     # Get the SNR
@@ -362,7 +427,7 @@ def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
 
     # If True, convolve down to Nyquist frequency
     if convolve_nyquist:
-        nyquist_psf = Gaussian2DKernel(0.8, x_size=img.shape[1], y_size=img.shape[0])
+        nyquist_psf = Gaussian2DKernel(pxscale*2, x_size=img.shape[1], y_size=img.shape[0])
         nyquist_fft = fft.fft2(fft.ifftshift(nyquist_psf))
     else:
         nyquist_fft = 1
@@ -374,11 +439,5 @@ def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
     # Do an inverse transform
     img_deconv = np.real(fft.ifft2(img_corr))
 
-    img_deconv = img_deconv[20:-20, 20:-20]
+    # img_deconv = img_deconv[20:-20, 20:-20]
     return img_deconv
-
-
-
-
-
-

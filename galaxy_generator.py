@@ -208,7 +208,6 @@ def sky_noise(image_psf, sky_mag, pixel_scale, seed=None, rms_noise=False):
 
 	elif type(image_psf) == np.ndarray:
 		# print('astropy')
-		
 		image_noise_setup = image_psf.copy()
 		# # print(np.min(image_noise_setup), sky_electrons)
 		image_noise_setup += sky_electrons
@@ -453,7 +452,7 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 	else:
 		print('psf method not understood')
 
-	return image_psf
+	return np.abs(image_psf)
 
 def simulate_perfect_galaxy(mag, r_eff, pxscale, fov_reff=10, sersic_n=1, q=1, beta=0, n_clumps=10, clump_properties=None, random_clump_properties=None):
 	"""Given galaxy and clump properties, simulates noiseless galaxy to a desired pixel scale.
@@ -507,16 +506,15 @@ def simulate_perfect_galaxy(mag, r_eff, pxscale, fov_reff=10, sersic_n=1, q=1, b
 	}
 
 	# NOTE RETURNING RPET IN ARCSEC
-	return image_perfect, out, r_pet*pxscale
+	return np.abs(image_perfect), out, r_pet*pxscale
 
 
 def get_galaxy_rng_vals(
-		N, perfect_pxscale=0.1, lims=_default_galaxy_properties, 
+		N, lims=_default_galaxy_properties, 
 		clump_props=_default_clump_properties, seed=None):
 	"""Generate parameters to make N perfect galaxies. No SNR or PSF effects.
 	Args:
 		N (int) : number of samples
-		perfect_pxscale (float): ideal PSF, default 0.1
 		lims (dict): dictionary with min and max limits for each parameter, see _default_galaxy_properties
 		clump_props (dict): same, for inidividual clumps, see _default_clump_properties
 		seed (int): random seed to use

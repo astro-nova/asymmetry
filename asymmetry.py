@@ -234,6 +234,8 @@ def get_asymmetry(
         center (np.array): [x, y] coordinates of the optimum asymmetry center
     """
     # TODO: add desired tolerance as an input parameter
+    if mask is None:
+        mask = np.zeros_like(img)
 
     # Calculate the background asymmetry and normalization
     sky_a, sky_norm, bgsd = _sky_properties(img, mask, a_type)

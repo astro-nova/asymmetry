@@ -214,7 +214,7 @@ def sky_noise(image_psf, sky_mag, pixel_scale, seed=None, rms_noise=False):
 		# # print(np.min(image_noise_setup), '\n')
 		image_noise = np.random.poisson(lam=image_noise_setup).astype(float)
 		# Testing only: no Poisson noise
-		# image_noise = image_noise_setup + np.random.normal(0, np.sqrt(sky_electrons), size=image_noise.shape)
+		# image_noise = image_noise_setup + np.random.normal(0, np.sqrt(sky_electrons), size=image_noise_setup.shape)
 		# return image_noise, np.sqrt(sky_electrons)
 		# print('here')
 		image_noise -= sky_electrons
@@ -452,7 +452,7 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 	else:
 		print('psf method not understood')
 
-	return np.abs(image_psf)
+	return image_psf
 
 def simulate_perfect_galaxy(mag, r_eff, pxscale, fov_reff=10, sersic_n=1, q=1, beta=0, n_clumps=10, clump_properties=None, random_clump_properties=None):
 	"""Given galaxy and clump properties, simulates noiseless galaxy to a desired pixel scale.

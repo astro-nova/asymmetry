@@ -536,7 +536,7 @@ def fourier_rescale(img, old_pxscale, new_pxscale):
         
         # Calculate the noise level
         bgsd = sigma_clipped_stats(img)[2]
-        noise = np.random.normal(loc=0, scale=bgsd, size=(N,N))
+        noise = np.random.normal(loc=0, scale=bgsd, size=(newsize,newsize))
         noise_fft = fft.fft2(noise, norm='ortho')
 
         # Rescale in the fourier domain. Normally, you would pad the frequency spectrum by 0s in the

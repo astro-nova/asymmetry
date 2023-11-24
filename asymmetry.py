@@ -517,3 +517,48 @@ def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
     img_deconv = np.real(fft.ifft2(img_corr, norm='ortho'))
 
     return img_deconv
+
+
+def fourier_rescale(img, old_pxscale, new_pxscale):
+    """Rescale the image to the desired pixel scale, preserving the noise level
+    Args:
+    
+    Returns:
+    """
+
+    factor = new_pxscale/old_pxscale
+    N = img.shape[0]
+    newsize = int(N/factor + 0.5)
+    # If expanding the image, need to do this to avoid adding 
+    # correlated noise. Populate high-frequencies with Gaussian noise
+    if factor < 1:
+        
+        
+        # Calculate the noise level
+        bgsd = sigma_clipped_stats(img)[2]
+        noise = np.random.normal(loc=0, scale=bgsd, size=(N,N))
+        noise_fft = fft.fft2(noise, norm='ortho')
+
+        # Rescale in the fourier domain. Normally, you would pad the frequency spectrum by 0s in the
+        # New high-frequency pixels. We want to preserve noise (which exists on all scales), so add
+        # Some noise in the high-frequency areas.
+        # This gets rid of artifacts on the noise level that we have otherwise when we upscale by interpolation.
+        img_fft = fft.fft2(img, norm='ortho')
+        img_fft = fft.ifftshift(img_fft)
+        
+        # Calculate the new size and pad the array with NaNs
+        newshape = (newsize, newsize)
+        padsize = (newshape[0]-img.shape[0], newshape[1]-img.shape[1])
+        img_zeros = np.pad(img_fft, (((padsize[0]+1)//2, padsize[0]//2), ((padsize[1]+1)//2, padsize[1]//2)), constant_values=np.nan)
+        
+        # Replace the NaNs with noise values and return back to spatial space
+        nans = np.isnan(img_zeros)
+        img_zeros[nans] = noise_fft[nans]
+        img_fft = fft.fftshift(img_zeros)
+        img_new = fft.ifft2(img_fft, norm='ortho')
+        
+    # For downscaling, no need to worry about this
+    else:
+        img = T.resize(img, (newsize,newsize)) * factor**2
+        
+    return img

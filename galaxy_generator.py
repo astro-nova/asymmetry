@@ -168,7 +168,7 @@ def gen_galaxy(mag, re, n, q, beta):
 
 	return gal
 
-def sky_noise(image_psf, sky_mag, pixel_scale, seed=None, rms_noise=False):
+def sky_noise(image_psf, sky_mag, pxscale, seed=None, rms_noise=False, **kwargs):
 	"""
 	take image and sky level, calculate level in electrons and apply noise with sky level and source e counts
 	can be seeded
@@ -186,7 +186,7 @@ def sky_noise(image_psf, sky_mag, pixel_scale, seed=None, rms_noise=False):
 		image_noise (galsim object) : image_psf + addded noise (image_psf is preserved due to copying)
 	"""
 
-	sky_uJy = mag2uJy(sky_mag)*pixel_scale*pixel_scale
+	sky_uJy = mag2uJy(sky_mag)*pxscale*pxscale
 	sky_electrons = uJy2galflux(sky_uJy, transmission_params['eff_wav'], 
 			     transmission_params['del_wav'], transmission) * t_exp * np.pi * (D*100./2)**2
 
@@ -361,7 +361,7 @@ def create_clumps(image, rp, gal_mag, clump_properties=None):
 	return clumps, all_xi, all_yi
 
 def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale=0.396, psf_method='galsim',
-			use_moffat=False):
+			use_moffat=False, **kwargs):
 	"""
 	adding source galaxy and clumps to image *then* convolve with psf
 	Args:
@@ -454,7 +454,7 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 
 	return image_psf
 
-def simulate_perfect_galaxy(mag, r_eff, pxscale, fov_reff=10, sersic_n=1, q=1, beta=0, n_clumps=10, clump_properties=None, random_clump_properties=None):
+def simulate_perfect_galaxy(mag, r_eff, pxscale, fov_reff=10, sersic_n=1, q=1, beta=0, n_clumps=10, clump_properties=None, random_clump_properties=None, **kwargs):
 	"""Given galaxy and clump properties, simulates noiseless galaxy to a desired pixel scale.
 	Args:
 		mag (float): r-band magnitude

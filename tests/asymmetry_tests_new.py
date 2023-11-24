@@ -16,7 +16,7 @@ import galsim
 # from asymmetry import get_asymmetry
 sys.path.append('../')
 from galaxy_generator import simulate_perfect_galaxy, add_source_to_image, sky_noise, get_galaxy_rng_vals, get_augmentation_rng_vals
-from asymmetry import fourier_deconvolve, get_asymmetry
+from asymmetry import fourier_deconvolve, get_asymmetry, fourier_rescale
 from astropy.stats import gaussian_fwhm_to_sigma
 from astropy.convolution import Gaussian2DKernel
 
@@ -24,7 +24,7 @@ from astropy.convolution import Gaussian2DKernel
 
 num_cores = multiprocessing.cpu_count()
 
-def get_a_values(img, rpet, psf_fwhm_px, err):
+def get_a_values(img, rpet, err, psf_fwhm, pxscale, perfect_pxscale):
     # Rpet is in pixels
     
     ap_size = 1.5*rpet
@@ -34,11 +34,15 @@ def get_a_values(img, rpet, psf_fwhm_px, err):
     a_cas = get_asymmetry(img, ap_size, a_type='cas', sky_type='annulus', bg_corr='residual', sky_annulus=[2, 3])[0]
     a_cas_corr = get_asymmetry(img, ap_size, a_type='cas_corr', sky_type='annulus', bg_corr='residual', sky_annulus=[2,3])[0]
 
-    # Fourier asymmetry
-    if psf_fwhm_px > 0:
-        psf = Gaussian2DKernel(psf_fwhm_px*gaussian_fwhm_to_sigma, x_size=img.shape[0])
-        img_deconv = fourier_deconvolve(img, psf, err, convolve_nyquist=True)
-        a_fourier = get_asymmetry(img_deconv, ap_size, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[2,3])[0]
+    # Fourier asymmetry: rescale the image then deconvolve
+    if psf_fwhm > 0:
+        img_rescaled = fourier_rescale(img, pxscale, perfect_pxscale)
+        err_rescaled = fourier_rescale(img, pxscale, perfect_pxscale)
+        psf = Gaussian2DKernel(psf_fwhm*gaussian_fwhm_to_sigma/perfect_pxscale, x_size=img.shape[0])
+        img_deconv = fourier_deconvolve(img_rescaled, psf, err_rescaled, convolve_nyquist=True)
+        a_fourier = get_asymmetry(
+            img_deconv, ap_size*pxscale/perfect_pxscale, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[2,3]
+        )[0]
     else:
         a_fourier = a_sq
         
@@ -50,9 +54,11 @@ def get_a_values(img, rpet, psf_fwhm_px, err):
 def single_galaxy_run(filepath, gal_params, img_params, ap_frac=1.5, perfect_pxscale=0.2):
 
     ##### Generate the perfect galaxy image at desired pixelscale
-    # Generate galaxy model. r_pet is in ARCSEC
+    # Generate galaxy model. r_pet is in ARCSEC.
+    # Convolve with a PSF to make the "perfect" image nyquist-sampled
     image_perfect, galaxy_dict, r_pet = simulate_perfect_galaxy(pxscale=perfect_pxscale,  **gal_params)
-
+    image_perfect = add_source_to_image(**galaxy_dict, psf_fwhm=2*perfect_pxscale, pxscale=perfect_pxscale, psf_method='astropy')
+    
     # Generate the perfect galaxy at new pixelscale
     image_lowres, galaxy_dict, r_pet = simulate_perfect_galaxy(**img_params, **gal_params)
     

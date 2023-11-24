@@ -495,8 +495,8 @@ def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
     noise_fft = np.abs(fft.fft2(noise, norm='ortho'))
     # Smooth the noise map
     filtsize = int(noise_fft.shape[0]*0.1)
-    noise_fft = savgol_filter(noise_fft, axis=0, window_length=filtsize, polyorder=2)
-    noise_fft = savgol_filter(noise_fft, axis=1, window_length=filtsize, polyorder=2)
+    noise_fft = savgol_filter(noise_fft, axis=0, window_length=filtsize, polyorder=1)
+    noise_fft = savgol_filter(noise_fft, axis=1, window_length=filtsize, polyorder=1)
 
 
     # Get the SNR

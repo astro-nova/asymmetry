@@ -33,7 +33,7 @@ _default_clump_properties = {
 
 _default_galaxy_properties = {
 	'mag' : (11, 18),
-	'n_clumps' : (5, 30),
+	'n_clumps' : (5, 50),
 	'sersic_n' : (1, 5),
 	'q' : (0.1, 1),
 	'reff_scatter' : (0, 1.5) # Mean and standard deviation
@@ -41,8 +41,8 @@ _default_galaxy_properties = {
 
 _default_aug_properties = {
 	'sky_mag' : (20, 26),
-	'psf_fwhm' : (0.2, 3),
-	'pxscale' : (0.1, 0.5)
+	'psf_fwhm' : (0.3, 3),
+	'pxscale' : (0.1, 1)
 }
 
 
@@ -571,7 +571,7 @@ def get_galaxy_rng_vals(
 	output = pd.DataFrame(output).to_dict(orient="records")
 	return output
 
-def get_augmentation_rng_vals(N, lims=_default_aug_properties, clump_props=_default_clump_properties, seed=None):
+def get_augmentation_rng_vals(N, lims=_default_aug_properties, seed=None):
 	"""Generate parameters to make N observed galaxies.
 	Args:
 		N (int) : number of samples

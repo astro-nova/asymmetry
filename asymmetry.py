@@ -6,7 +6,7 @@ from skimage import transform as T
 from skimage import measure
 from scipy import fft
 from scipy.interpolate import griddata
-from astropy.stats import sigma_clipped_stats
+from astropy.stats import sigma_clipped_stats, gaussian_fwhm_to_sigma
 from astropy.convolution import Gaussian2DKernel
 from scipy.signal import savgol_filter
 from astropy.stats import gaussian_fwhm_to_sigma

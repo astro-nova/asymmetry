@@ -7,9 +7,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 from joblib import Parallel, delayed
 import multiprocessing
-from skimage.transform import rescale
-from astropy.stats import sigma_clipped_stats
-
+from skimage import transform as T
 from astropy import units as u
 from photutils.aperture import EllipticalAperture, CircularAnnulus, CircularAperture, ApertureStats
 import galsim
@@ -18,14 +16,14 @@ import galsim
 sys.path.append('../')
 from galaxy_generator import simulate_perfect_galaxy, add_source_to_image, sky_noise, get_galaxy_rng_vals, get_augmentation_rng_vals
 from asymmetry import fourier_deconvolve, get_asymmetry, fourier_rescale
-from astropy.stats import gaussian_fwhm_to_sigma
-from astropy.convolution import Gaussian2DKernel
+from astropy.stats import gaussian_fwhm_to_sigma, sigma_clipped_stats, gaussian_sigma_to_fwhm
+from astropy.convolution import Gaussian2DKernel, convolve
 
 
 
 num_cores = multiprocessing.cpu_count()
 
-def get_a_values(img, rpet, err, psf_fwhm, pxscale, perfect_pxscale):
+def get_a_values(img, rpet, psf_fwhm, pxscale, perfect_pxscale, perfect_shape):
     # Rpet is in pixels
     
     ap_size = 1.5*rpet
@@ -34,34 +32,35 @@ def get_a_values(img, rpet, err, psf_fwhm, pxscale, perfect_pxscale):
     a_sq = get_asymmetry(img, ap_size, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[2, 3])[0]
     a_cas = get_asymmetry(img, ap_size, a_type='cas', sky_type='annulus', bg_corr='residual', sky_annulus=[2, 3])[0]
     a_cas_corr = get_asymmetry(img, ap_size, a_type='cas_corr', sky_type='annulus', bg_corr='residual', sky_annulus=[2,3])[0]
-
+    a_sq = np.sqrt(a_sq/10)
+    
     # Fourier asymmetry: rescale the image then deconvolve
     if psf_fwhm > 0:
-        # Calculate the error array
-        bgsd = sigma_clipped_stats(img)[2]
-        err = np.sqrt(img + bgsd**2)
-        img_rescaled = fourier_rescale(img, pxscale, perfect_pxscale)
-        err_rescaled = fourier_rescale(err, pxscale, perfect_pxscale)
-        psf = Gaussian2DKernel(psf_fwhm*gaussian_fwhm_to_sigma/perfect_pxscale, x_size=img.shape[0])
+        factor = perfect_pxscale/pxscale
+        img_rescaled = T.resize(img, perfect_shape) * factor**2
+        bgsd = sigma_clipped_stats(img_rescaled)[2]
+        err_rescaled = np.sqrt(img_rescaled + bgsd**2)
+        psf = Gaussian2DKernel(psf_fwhm*gaussian_fwhm_to_sigma/perfect_pxscale, x_size=img_rescaled.shape[0])
         img_deconv = fourier_deconvolve(img_rescaled, psf, err_rescaled, convolve_nyquist=True)
         a_fourier = get_asymmetry(
             img_deconv, ap_size*pxscale/perfect_pxscale, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[2,3]
         )[0]
+        a_fourier = np.sqrt(a_fourier/10)
     else:
         a_fourier = a_sq
         
     # Return all measurements
-    res = {'a_cas' : a_cas, 'a_cas_corr' : a_cas_corr, 'a_sq' : np.sqrt(a_sq), 'a_fourier' : np.sqrt(a_fourier)}
+    res = {'a_cas' : a_cas, 'a_cas_corr' : a_cas_corr, 'a_sq' : a_sq, 'a_fourier' :a_fourier}
     return res
 
 
-def single_galaxy_run(filepath, gal_params, img_params, ap_frac=1.5, perfect_pxscale=0.2):
+def single_galaxy_run(filepath, gal_params, img_params, ap_frac=1.5, perfect_pxscale=0.1):
 
     ##### Generate the perfect galaxy image at desired pixelscale
     # Generate galaxy model. r_pet is in ARCSEC.
     # Convolve with a PSF to make the "perfect" image nyquist-sampled
     image_perfect, galaxy_dict, r_pet = simulate_perfect_galaxy(pxscale=perfect_pxscale,  **gal_params)
-    image_perfect = add_source_to_image(**galaxy_dict, psf_fwhm=2*perfect_pxscale, pxscale=perfect_pxscale, psf_method='astropy')
+    image_perfect = add_source_to_image(**galaxy_dict, psf_fwhm=3*perfect_pxscale, pxscale=perfect_pxscale, psf_method='astropy')
     
     # Generate the perfect galaxy at new pixelscale
     image_lowres, galaxy_dict, r_pet = simulate_perfect_galaxy(**img_params, **gal_params)
@@ -82,15 +81,15 @@ def single_galaxy_run(filepath, gal_params, img_params, ap_frac=1.5, perfect_pxs
 
     # Calculate the real asymmetry
     a_cas_real = get_asymmetry(
-        image_perfect, ap_frac*r_pet/perfect_pxscale, a_type='cas', sky_type='skybox', bg_corr='none', sky_annulus=[2, 3]
+        image_perfect, ap_frac*r_pet/perfect_pxscale, a_type='cas', sky_type='annulus', bg_corr='residual', sky_annulus=[2, 3]
     )[0]
     a_sq_real = get_asymmetry(
-        image_perfect, ap_frac*r_pet/perfect_pxscale, a_type='squared', sky_type='skybox', bg_corr='none', sky_annulus=[2, 3]
+        image_perfect, ap_frac*r_pet/perfect_pxscale, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[2, 3]
 )[0]
-    a_sq_real = np.sqrt(a_sq_real)
+    a_sq_real = np.sqrt(a_sq_real/10)
     
     # Calculate asyms from the noisy image
-    output = get_a_values(image_noisy, r_pet/pxscale, img_params['psf_fwhm'], pxscale, perfect_pxscale)
+    output = get_a_values(image_noisy, r_pet/pxscale, img_params['psf_fwhm'], pxscale, perfect_pxscale, image_perfect.shape)
 
     ##### Store output
     output['a_cas_real'] = a_cas_real
@@ -116,7 +115,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Perfect resolution pxscale
-    perfect_pxscale = 0.1
+    perfect_pxscale = 0.2
     
     # Generate random params
     N = int(args.N)
@@ -125,7 +124,8 @@ if __name__ == '__main__':
     
     # Fix the parameters other than the one I want to vary
     for p in img_params:
-        p['sky_mag'] = 30
+#         p['sky_mag'] = 30
+        p['pxscale'] = perfect_pxscale
         p['psf_fwhm'] = 3*p['pxscale']
 
     ### Run the execution in parallel

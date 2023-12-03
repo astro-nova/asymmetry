@@ -8,6 +8,7 @@ from scipy import stats
 from joblib import Parallel, delayed
 import multiprocessing
 from skimage.transform import rescale
+from astropy.stats import sigma_clipped_stats
 
 from astropy import units as u
 from photutils.aperture import EllipticalAperture, CircularAnnulus, CircularAperture, ApertureStats
@@ -36,6 +37,9 @@ def get_a_values(img, rpet, err, psf_fwhm, pxscale, perfect_pxscale):
 
     # Fourier asymmetry: rescale the image then deconvolve
     if psf_fwhm > 0:
+        # Calculate the error array
+        bgsd = sigma_clipped_stats(img)[2]
+        err = np.sqrt(img + bgsd**2)
         img_rescaled = fourier_rescale(img, pxscale, perfect_pxscale)
         err_rescaled = fourier_rescale(err, pxscale, perfect_pxscale)
         psf = Gaussian2DKernel(psf_fwhm*gaussian_fwhm_to_sigma/perfect_pxscale, x_size=img.shape[0])
@@ -86,7 +90,7 @@ def single_galaxy_run(filepath, gal_params, img_params, ap_frac=1.5, perfect_pxs
     a_sq_real = np.sqrt(a_sq_real)
     
     # Calculate asyms from the noisy image
-    output = get_a_values(image_noisy, r_pet/pxscale, err, img_params['psf_fwhm'], pxscale, perfect_pxscale)
+    output = get_a_values(image_noisy, r_pet/pxscale, img_params['psf_fwhm'], pxscale, perfect_pxscale)
 
     ##### Store output
     output['a_cas_real'] = a_cas_real

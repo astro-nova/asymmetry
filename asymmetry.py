@@ -503,9 +503,9 @@ def fourier_deconvolve(img, psf, noise, convolve_nyquist=False, perfect_pxscale=
     # Get the SNR
     snr = _fit_snr(img_fft, noise_fft, psf_fft)
 
-    # If True, convolve with a narrow 2px PSF
+    # If True, convolve with a narrow PSF - with FWHM = 3 x pxscale
     if convolve_nyquist:
-        nyquist_size = 3*gaussian_fwhm_to_sigma
+        nyquist_size = 3*gaussian_fwhm_to_sigma # FWHM = 3 x pxscale, sigma ~ 0.4 x FWHM
         nyquist_psf = Gaussian2DKernel(nyquist_size, x_size=img.shape[1], y_size=img.shape[0])
         nyquist_fft = fft.fft2(fft.ifftshift(nyquist_psf), norm='backward')
     else:

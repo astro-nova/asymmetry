@@ -8,7 +8,6 @@ from scipy import stats
 from joblib import Parallel, delayed
 import multiprocessing
 from skimage import transform as T
-
 from astropy import units as u
 from photutils.aperture import EllipticalAperture, CircularAnnulus, CircularAperture, ApertureStats
 import galsim

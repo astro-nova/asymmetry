@@ -9,6 +9,7 @@ from scipy.interpolate import griddata
 from astropy.stats import sigma_clipped_stats, gaussian_fwhm_to_sigma
 from astropy.convolution import Gaussian2DKernel
 from scipy.signal import savgol_filter
+from astropy.stats import gaussian_fwhm_to_sigma
 
 # def _sky_properties(img, bg_size, a_type='cas'):
 #     """Calculates the sky asymmetry and flux.
@@ -470,7 +471,7 @@ def _fit_snr(img_fft, noise_fft, psf_fft, snr_thresh=5, quant_thresh=0.8):
     
     return fit_snr
 
-def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
+def fourier_deconvolve(img, psf, noise, convolve_nyquist=False, perfect_pxscale=0.1):
     """Performs deconvolution of the image by dividing by SNR-weighted
     PSF in the Fourier space. Similar to Wiener transform excep the noise
     level is retained in the deconvolved image.
@@ -502,9 +503,9 @@ def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
     # Get the SNR
     snr = _fit_snr(img_fft, noise_fft, psf_fft)
 
-    # If True, convolve with a narrow 2px PSF
+    # If True, convolve with a narrow PSF - with FWHM = 3 x pxscale
     if convolve_nyquist:
-        nyquist_size = 3*gaussian_fwhm_to_sigma
+        nyquist_size = 3*gaussian_fwhm_to_sigma # FWHM = 3 x pxscale, sigma ~ 0.4 x FWHM
         nyquist_psf = Gaussian2DKernel(nyquist_size, x_size=img.shape[1], y_size=img.shape[0])
         nyquist_fft = fft.fft2(fft.ifftshift(nyquist_psf), norm='backward')
     else:
@@ -520,35 +521,32 @@ def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
     return img_deconv
 
 
-def fourier_rescale(img, old_pxscale, new_pxscale):
+def fourier_rescale(img, newshape):
     """Rescale the image to the desired pixel scale, preserving the noise level
     Args:
     
     Returns:
     """
 
-    factor = new_pxscale/old_pxscale
-    N = img.shape[0]
-    newsize = int(N/factor + 0.5)
+    factor = img.shape[0]/newshape[0]
+                                
     # If expanding the image, need to do this to avoid adding 
     # correlated noise. Populate high-frequencies with Gaussian noise
     if factor < 1:
         
-        
         # Calculate the noise level
-        bgsd = sigma_clipped_stats(img)[2]
-        noise = np.random.normal(loc=0, scale=bgsd, size=(newsize,newsize))
-        noise_fft = fft.fft2(noise, norm='ortho')
+        bgsd = sigma_clipped_stats(img)[2] * factor 
+        noise = np.random.normal(loc=0, scale=bgsd, size=(newshape[0],newshape[1]))
+        noise_fft = fft.ifftshift(fft.fft2(noise, norm='backward'))
 
         # Rescale in the fourier domain. Normally, you would pad the frequency spectrum by 0s in the
         # New high-frequency pixels. We want to preserve noise (which exists on all scales), so add
         # Some noise in the high-frequency areas.
         # This gets rid of artifacts on the noise level that we have otherwise when we upscale by interpolation.
-        img_fft = fft.fft2(img, norm='ortho')
+        img_fft = fft.fft2(img, norm='backward')
         img_fft = fft.ifftshift(img_fft)
         
         # Calculate the new size and pad the array with NaNs
-        newshape = (newsize, newsize)
         padsize = (newshape[0]-img.shape[0], newshape[1]-img.shape[1])
         img_zeros = np.pad(img_fft, (((padsize[0]+1)//2, padsize[0]//2), ((padsize[1]+1)//2, padsize[1]//2)), constant_values=np.nan)
         
@@ -556,10 +554,11 @@ def fourier_rescale(img, old_pxscale, new_pxscale):
         nans = np.isnan(img_zeros)
         img_zeros[nans] = noise_fft[nans]
         img_fft = fft.fftshift(img_zeros)
-        img_new = fft.ifft2(img_fft, norm='ortho')
+        img_new = fft.ifft2(img_fft, norm='backward')
+
         
     # For downscaling, no need to worry about this
     else:
-        img = T.resize(img, (newsize,newsize)) * factor**2
+        img_new = T.resize(img, newshape) * factor**2
         
-    return img
+    return np.real(img_new)

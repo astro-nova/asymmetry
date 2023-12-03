@@ -35,7 +35,7 @@ def get_a_values(img, rpet, psf_fwhm, pxscale, perfect_pxscale, perfect_shape):
     a_sq = np.sqrt(a_sq/10)
     
     # Fourier asymmetry: rescale the image then deconvolve
-    if psf_fwhm > 0:
+    if psf_fwhm > perfect_pxscale*3:
         factor = perfect_pxscale/pxscale
         img_rescaled = T.resize(img, perfect_shape) * factor**2
         bgsd = sigma_clipped_stats(img_rescaled)[2]
@@ -58,8 +58,8 @@ def single_galaxy_run(filepath, gal_params, img_params, ap_frac=1.5, perfect_pxs
 
     ##### Generate the perfect galaxy image at desired pixelscale
     # Generate galaxy model. r_pet is in ARCSEC.
-    # Convolve with a PSF to make the "perfect" image nyquist-sampled
     image_perfect, galaxy_dict, r_pet = simulate_perfect_galaxy(pxscale=perfect_pxscale,  **gal_params)
+    # Convolve with a PSF to make the "perfect" image nyquist-sampled
     image_perfect = add_source_to_image(**galaxy_dict, psf_fwhm=3*perfect_pxscale, pxscale=perfect_pxscale, psf_method='astropy')
     
     # Generate the perfect galaxy at new pixelscale

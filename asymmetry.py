@@ -55,7 +55,7 @@ from astropy.stats import gaussian_fwhm_to_sigma
 
 def _sky_properties(img, mask, a_type='cas'):
     
-    bgmean, bgmed, bgsd = sigma_clipped_stats(img, mask=mask)
+    _, _, bgsd = sigma_clipped_stats(img, mask=mask)
     if a_type == 'cas':
         sky_a = 1.6*bgsd
         sky_norm = 0.8*bgsd 
@@ -63,7 +63,7 @@ def _sky_properties(img, mask, a_type='cas'):
         sky_a = 1.6*bgsd
         sky_norm = 0
     elif a_type == 'squared':
-        sky_a = 20*bgsd**2
+        sky_a = 2*bgsd**2
         sky_norm = bgsd**2
     return sky_a, sky_norm, bgsd
 
@@ -160,7 +160,7 @@ def _asymmetry_func(center, img, ap_size, mask=None,
         residual = ap.do_photometry(np.abs(img-img_rotated), mask=mask)[0][0]
     elif a_type == 'squared':
         total_flux = ap.do_photometry(img**2, mask=mask)[0][0]
-        residual = 10*ap.do_photometry((img-img_rotated)**2, mask=mask)[0][0]
+        residual = ap.do_photometry((img-img_rotated)**2, mask=mask)[0][0]
     elif a_type == 'cas_corr':
         total_flux = ap.do_photometry(img, mask=mask)[0][0]
         residual = ap.do_photometry(np.abs(img-img_rotated), mask=mask)[0][0]
@@ -177,7 +177,7 @@ def _asymmetry_func(center, img, ap_size, mask=None,
             sky_a = ap_sky.do_photometry(np.abs(img-img_rotated), mask=mask)[0][0] / sky_area
             sky_norm = ap_sky.do_photometry(np.abs(img), mask=mask)[0][0] / sky_area
         elif a_type == 'squared':
-            sky_a = 10*ap_sky.do_photometry((img-img_rotated)**2, mask=mask)[0][0] / sky_area
+            sky_a = ap_sky.do_photometry((img-img_rotated)**2, mask=mask)[0][0] / sky_area
             sky_norm = ap_sky.do_photometry(img**2, mask=mask)[0][0] / sky_area
         elif a_type == 'cas_corr':
             sky_a = ap_sky.do_photometry(np.abs(img-img_rotated), mask=mask)[0][0] / sky_area
@@ -192,6 +192,10 @@ def _asymmetry_func(center, img, ap_size, mask=None,
         a = (residual - ap_area*sky_a) / total_flux
     elif bg_corr == 'full':
         a = (residual - ap_area*sky_a) / (total_flux - ap_area*sky_norm)
+
+    # Do the RMS
+    if a_type == 'squared':
+        a = np.sqrt(a)
 
     return a
 
@@ -471,7 +475,7 @@ def _fit_snr(img_fft, noise_fft, psf_fft, snr_thresh=5, quant_thresh=0.8):
     
     return fit_snr
 
-def fourier_deconvolve(img, psf, noise, convolve_nyquist=False, perfect_pxscale=0.1):
+def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
     """Performs deconvolution of the image by dividing by SNR-weighted
     PSF in the Fourier space. Similar to Wiener transform excep the noise
     level is retained in the deconvolved image.

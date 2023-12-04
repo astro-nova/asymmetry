@@ -6,10 +6,11 @@ from skimage import transform as T
 from skimage import measure
 from scipy import fft
 from scipy.interpolate import griddata
-from astropy.stats import sigma_clipped_stats, gaussian_fwhm_to_sigma
+from astropy.stats import sigma_clipped_stats
 from astropy.convolution import Gaussian2DKernel
 from scipy.signal import savgol_filter
 from astropy.stats import gaussian_fwhm_to_sigma
+from scipy.ndimage import uniform_filter
 
 # def _sky_properties(img, bg_size, a_type='cas'):
 #     """Calculates the sky asymmetry and flux.
@@ -55,7 +56,7 @@ from astropy.stats import gaussian_fwhm_to_sigma
 
 def _sky_properties(img, mask, a_type='cas'):
     
-    _, _, bgsd = sigma_clipped_stats(img, mask=mask)
+    _, bgmed, bgsd = sigma_clipped_stats(img, mask=mask)
     if a_type == 'cas':
         sky_a = 1.6*bgsd
         sky_norm = 0.8*bgsd 
@@ -413,16 +414,22 @@ def _fit_snr_old(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
     return fit_snr
 
 
-def _fit_snr(img_fft, noise_fft, psf_fft, snr_thresh=5, quant_thresh=0.8):
+def _fit_snr(img_fft, noise_fft, psf_fft, snr_thresh=3, quant_thresh=0.8):
     """Given an FFT of an image and a noise level, estimate SNR(omega)
     by interpolating high SNR regions and setting high-frequency SNR to 1k less than SNR max.
     """
     
     snr_fft = np.abs(img_fft) / np.abs(noise_fft)
+    # snr_og = snr_fft.copy()
+
+    # Filter the SNR
+    # filtsize = int(0.01*img_fft.shape[0] + 0.5)
+    # filtsize = 2
+    # snr_fft = uniform_filter(snr_fft, size=filtsize, mode='wrap')
 
     # Calculate from the image SNR
     snr_med = np.median(np.abs(snr_fft))
-    snr_min = np.min([np.log10(np.max(snr_fft))-3, np.log10(snr_med)])  # Minimum SNR is 1000 times dimmer than the center
+    snr_min = np.min([np.log10(np.max(snr_fft))-4, np.log10(snr_med)])  # Minimum SNR is 1000 times dimmer than the center
     
     # Only look at one quarter of the array (FFT is reflected along x and y)
     xc = int(img_fft.shape[0]/2)
@@ -445,15 +452,19 @@ def _fit_snr(img_fft, noise_fft, psf_fft, snr_thresh=5, quant_thresh=0.8):
     xs = XS[snr_ids]
     ys = YS[snr_ids]
 
+    
+
     # Add a low SNR at highest frequency edges to help interpolation
     boundaries = np.arange(xc+1)
     xs = np.concatenate((xs, np.ones_like(boundaries)*(xc+1), boundaries))
     ys = np.concatenate((ys, boundaries, np.ones_like(boundaries)*(xc+1)))
     log_snr = np.concatenate((log_snr, snr_min*np.ones_like(boundaries), snr_min*np.ones_like(boundaries)))
 
+
     # Interpolate
-    snr_grid = griddata((xs, ys), log_snr, (XS, YS), method='linear')
+    snr_grid = griddata((xs, ys), log_snr, (XS, YS), method='linear', fill_value=snr_min)
     
+
     # Expand the grid (corner) back to the original shape by doubling in X and Y
     j = -1 
     k = -1 if (snr_fft.shape[0] % 2 == 1) else -2
@@ -469,9 +480,11 @@ def _fit_snr(img_fft, noise_fft, psf_fft, snr_thresh=5, quant_thresh=0.8):
     # Rewrite the good SNR regions with real values
     good_ids = np.nonzero(snr_fft > snr_lim)
     fit_snr[good_ids] = snr_fft[good_ids]
-    
+    # fit_snr[good_ids] = snr_og[good_ids]
+
+
     # Correct the SNR by the PSF
-    fit_snr = fit_snr / ( psf_fft + 1/fit_snr )
+    fit_snr = fit_snr / (psf_fft + 1/fit_snr )
     
     return fit_snr
 
@@ -498,11 +511,9 @@ def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
     # noise = np.sqrt(img + sky_sigma**2)
     noise = np.random.normal(loc=0, scale=np.abs(noise), size=img.shape)
     noise_fft = np.abs(fft.fft2(noise, norm='ortho'))
-    # Smooth the noise map
+    # # Smooth the noise map
     filtsize = max([3,int(noise_fft.shape[0]*0.1)])
-    noise_fft = savgol_filter(noise_fft, axis=0, window_length=filtsize, polyorder=2)
-    noise_fft = savgol_filter(noise_fft, axis=1, window_length=filtsize, polyorder=2)
-
+    noise_fft = uniform_filter(noise_fft, filtsize)
 
     # Get the SNR
     snr = _fit_snr(img_fft, noise_fft, psf_fft)

@@ -40,7 +40,7 @@ _default_galaxy_properties = {
 }
 
 _default_aug_properties = {
-	'sky_mag' : (20, 30),
+	'sky_mag' : (20, 28),
 	'psf_fwhm' : (0.3, 3),
 	'pxscale' : (0.1, 1)
 }

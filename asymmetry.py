@@ -86,6 +86,7 @@ def _asymmetry_center(img, ap_size, sky_a,
     # more weight on the central object and avoids placing the first guess on a local max.
     M = measure.moments(img**2, order=2)
     x0 = (M[0, 1] / M[0, 0], M[1, 0] / M[0, 0])
+#     x0 = (img.shape[1]/2, img.shape[0]/2)
 
     # Find the minimum of corrected |A|
     res = opt.minimize(

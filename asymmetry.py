@@ -147,7 +147,7 @@ def _asymmetry_func(center, img, ap_size, mask=None,
     assert sky_type in ['skybox', 'annulus'], 'sky_type should be "skybox" or "annulus".'
 
     # Rotate the image about asymmetry center
-    img_rotated = T.rotate(img, 180, center=center, order=3)
+    img_rotated = T.rotate(img, 180, center=center, order=0)
     mask_rotated = T.rotate(mask, 180, center=center, order=0)
     mask = mask.astype(bool) | mask_rotated.astype(bool)
 
@@ -197,7 +197,7 @@ def _asymmetry_func(center, img, ap_size, mask=None,
 
     # Do the RMS
     if a_type == 'squared':
-        a = np.sqrt(a)
+        a = np.sqrt(np.abs(a))
 
     return a
 

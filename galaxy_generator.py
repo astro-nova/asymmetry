@@ -526,6 +526,9 @@ def get_galaxy_rng_vals(
 	for key, value in _default_galaxy_properties.items():
 		if key not in lims:
 			lims[key] = value
+	for key, value in _default_clump_properties.items():
+		if key not in clump_props:
+			clump_props[key] = value
 
 	# Using NumPy's new generator framework instead of np.random...
 	rng = np.random.default_rng(seed=seed)

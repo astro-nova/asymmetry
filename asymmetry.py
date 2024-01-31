@@ -247,21 +247,23 @@ def get_asymmetry(
         mask = np.zeros_like(img)
 
     # Calculate the background asymmetry and normalization
-    sky_a, sky_norm, bgsd = _sky_properties(img, mask, a_type)
-
-
-
+    # sky_a, sky_norm, bgsd = _sky_properties(img, mask, a_type)
     x0 = np.array([img.shape[1]/2, img.shape[0]/2], dtype=int)
+
     res = opt.minimize(
-        
         _asymmetry_func, x0=x0, method=optimizer,
         options={
             'xatol': xtol, 'fatol' : atol
         },
-        args=(img, ap_size, mask, a_type, 'skybox', sky_a, sky_norm, 0, bg_corr, e, theta))
+        args=(
+            img, ap_size, mask, a_type, 'annulus', None, None, sky_annulus, bg_corr, e, theta
+            ))
 
 
-    a = _asymmetry_func(res.x, img, ap_size, mask, a_type, sky_type, sky_a, sky_norm, sky_annulus, bg_corr, e, theta)
+    # a = _asymmetry_func(   
+    #     res.x, img, ap_size, mask, a_type, sky_type, sky_a, sky_norm, 
+    #     sky_annulus, bg_corr, e, theta)
+    a = res.fun
     center = res.x
 
     # x0 = np.array([img.shape[1]/2, img.shape[0]/2], dtype=int)

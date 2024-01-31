@@ -23,10 +23,7 @@ from astropy.convolution import Gaussian2DKernel, convolve
 
 num_cores = multiprocessing.cpu_count()
 
-def get_a_values(img, rpet, psf_fwhm, pxscale, perfect_pxscale, perfect_shape):
-    # Rpet is in pixels
-    
-    ap_size = 1.5*rpet
+def get_a_values(img, ap_size, psf_fwhm, pxscale, perfect_pxscale, perfect_shape):
     
     # Non-fourier asymmetries
     a_sq = get_asymmetry(img, ap_size, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[2, 3])[0]
@@ -40,15 +37,13 @@ def get_a_values(img, rpet, psf_fwhm, pxscale, perfect_pxscale, perfect_shape):
         bgsd = sigma_clipped_stats(img_rescaled)[2]
         err_rescaled = np.sqrt(img_rescaled + bgsd**2)
         psf = Gaussian2DKernel(psf_fwhm*gaussian_fwhm_to_sigma/perfect_pxscale, x_size=img_rescaled.shape[0])
-        
+
         # Deconvolving: not super stable, so try a few times, if still doesn't work, return nan
         img_deconv = np.nan * np.ones_like(img_rescaled)
         count = 0
         while np.all(np.isnan(img_deconv)) and count<10:
             img_deconv = fourier_deconvolve(img_rescaled, psf, err_rescaled, convolve_nyquist=True)
             count +=1
-        
-        
         # If deconvolution failed, simply return nan
         if np.all(np.isnan(img_deconv)):
             a_fourier = np.nan
@@ -73,7 +68,7 @@ def single_galaxy_run(filepath, gal_params, img_params, ap_frac=1.5, perfect_pxs
     image_perfect = add_source_to_image(**galaxy_dict, psf_fwhm=3*perfect_pxscale, pxscale=perfect_pxscale, psf_method='astropy')
     
     # Generate the perfect galaxy at new pixelscale
-    image_lowres, galaxy_dict, r_pet = simulate_perfect_galaxy(**img_params, **gal_params)
+    image_lowres, galaxy_dict, _ = simulate_perfect_galaxy(**img_params, **gal_params)
     
     # Create observed image
     image_psf = add_source_to_image(**galaxy_dict, **img_params, psf_method='astropy')
@@ -84,7 +79,7 @@ def single_galaxy_run(filepath, gal_params, img_params, ap_frac=1.5, perfect_pxs
     err = np.sqrt(image_psf + sky_flux**2)
     
     # Calculate average SNR in the aperture
-    snr = image_lowres / err
+    snr = image_psf / err
     xc, yc = image_lowres.shape[1]/2, image_lowres.shape[0]/2
     ap = CircularAperture((xc,yc), ap_frac*r_pet/pxscale)
     avg_snr = ap.do_photometry(snr)[0][0]/ap.area
@@ -95,10 +90,10 @@ def single_galaxy_run(filepath, gal_params, img_params, ap_frac=1.5, perfect_pxs
     )[0]
     a_sq_real = get_asymmetry(
         image_perfect, ap_frac*r_pet/perfect_pxscale, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[2, 3]
-)[0]
+    )[0]
     
     # Calculate asyms from the noisy image
-    output = get_a_values(image_noisy, r_pet/pxscale, img_params['psf_fwhm'], pxscale, perfect_pxscale, image_perfect.shape)
+    output = get_a_values(image_noisy, ap_frac*r_pet/pxscale, img_params['psf_fwhm'], pxscale, perfect_pxscale, image_perfect.shape)
 
     ##### Store output
     output['a_cas_real'] = a_cas_real
@@ -124,7 +119,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Perfect resolution pxscale
-    perfect_pxscale = 0.2
+    perfect_pxscale = 0.1
     
     # Generate random params
     N = int(args.N)

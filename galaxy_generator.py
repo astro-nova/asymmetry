@@ -28,7 +28,7 @@ gsparams = galsim.GSParams(maximum_fft_size=20000)
 _default_clump_properties = {
 	'r' : (0.05, 1.0),
 	'logf' : (-2, -0.3),
-	'sigma' : (0.1, 3)
+	'sigma' : (0.03, 3)
 }
 
 _default_galaxy_properties = {
@@ -40,9 +40,9 @@ _default_galaxy_properties = {
 }
 
 _default_aug_properties = {
-	'sky_mag' : (20, 28),
-	'psf_fwhm' : (0.3, 3),
-	'pxscale' : (0.1, 1)
+	'sky_mag' : (20, 30),
+	'psf_fwhm' : (0.3, 2),
+	'pxscale' : (0.1, 2/3)
 }
 
 
@@ -214,8 +214,8 @@ def sky_noise(image_psf, sky_mag, pxscale, seed=None, rms_noise=False, **kwargs)
 		# # print(np.min(image_noise_setup), '\n')
 		image_noise = np.random.poisson(lam=image_noise_setup).astype(float)
 		# Testing only: no Poisson noise
-		# image_noise = image_noise_setup + np.random.normal(0, np.sqrt(sky_electrons), size=image_noise_setup.shape)
-		# return image_noise, np.sqrt(sky_electrons)
+# 		image_noise = image_noise_setup + np.random.normal(0, np.sqrt(sky_electrons), size=image_noise_setup.shape)
+# 		return image_noise, np.sqrt(sky_electrons)
 		# print('here')
 		image_noise -= sky_electrons
 

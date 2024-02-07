@@ -417,7 +417,7 @@ def _fit_snr_old(img_fft, noise_fft, snr_thresh=3, quant_thresh=0.98):
     return fit_snr
 
 
-def _fit_snr(img_fft, noise_fft, psf_fft, snr_thresh=3, quant_thresh=0.8):
+def _fit_snr_old2(img_fft, noise_fft, psf_fft, snr_thresh=3, quant_thresh=0.8):
     """Given an FFT of an image and a noise level, estimate SNR(omega)
     by interpolating high SNR regions and setting high-frequency SNR to 1k less than SNR max.
     """
@@ -491,6 +491,126 @@ def _fit_snr(img_fft, noise_fft, psf_fft, snr_thresh=3, quant_thresh=0.8):
     
     return fit_snr
 
+
+
+
+def deconv_filter(img_fft, psf_fft, snr_fft, nyquist=True):
+    """Deconvolves the image using the Wiener-like deconvolution.
+    Args:
+        img_fft: Fourier transform of the image array
+        psf_fft: Fourier transform of the PSF we want to deconvolve
+        snr_fft: Fourier SNR (F[|signal|^2]/F[|noise|^2])
+        nyquist: If True, convolve the image with a small PSF to ensure Nyquist sampling
+    Returns:
+        img_corr: deconvolved image in the Fourier space
+        H: the Wiener transform used in deconvolution
+    """
+    
+    psf_fft_sq = np.abs(psf_fft)**2
+    snr_sq = np.abs(snr_fft)**2
+    
+    if nyquist:
+        psf_new = Gaussian2DKernel(3*gaussian_fwhm_to_sigma, x_size=img_fft.shape[1], y_size=img_fft.shape[0])
+        psf_new_fft = fft.fft2(fft.ifftshift(psf_new), norm='backward')
+        H = (np.conj(psf_fft)*psf_new_fft + 1/snr_sq) / (psf_fft_sq + 1/snr_sq)
+    else:
+        H = (np.conj(psf_fft) + 1/snr_sq) / (psf_fft_sq + 1/snr_sq)
+
+    img_corr = img_fft * H 
+    return img_corr, H
+
+def _fit_snr(img_fft, noise_fft, psf_fft):
+    """Given an FFT of an image and a noise level, estimate SNR in frequency space, i.e.
+    F[|signal|]/F[|noise|]. First, estimate the SNR from the observed image, then filter
+    and deconvolve the SNR array to try to estimate the /real/ SNR.
+    Args:
+        img_fft: image array in Fourier space
+        noise_fft: noise array in Fourier space
+        psf_fft: PSF in Fourier space
+    Returns:
+        snr_fit: the approximated real SNR in Fourier space
+    """
+    
+    # First, estimate the SNR from the observed image
+    # This underestimates SNR at low frequencies and overestimates at noise-dominated fs.
+    power = np.abs(img_fft)
+    noisepower = np.abs(noise_fft)
+    snr_image = power/noisepower
+
+    # Filter the SNR array to get rid of the noise contributions
+    filtsize = 0.02*img_fft.shape[0]
+    snr_smooth = uniform_filter(snr_image, size=filtsize, mode='mirror')
+
+    # 'Deconvolve' SNR: increase the SNR at low frequencies smeared by PSF
+    snr_smooth, H_smooth = deconv_filter(snr_smooth, psf_fft, snr_smooth)
+    snr_smooth = np.abs(snr_smooth)
+
+    ####################### FITTING ################
+    # We have a smooth SNR estimate that is correct at low frequencies
+    # But overestimates the real SNR where signal is dominated by noise.
+    # Keep the low frequencies and discard the high ones
+    # Set high-frequency SNR to some low value, and interpolate in log space.
+
+    # Value to use at high-f end: 10,000 smaller than peak SNR
+    snr_min = np.log10(np.max(snr_smooth))-5
+
+    # Only look at one quarter of the array (FFT is reflected along x and y)
+    xc = int(img_fft.shape[0]/2)
+    # Image x, y arrays as placeholders
+    xs = np.arange(xc+1)
+    XS, YS = np.meshgrid(xs, xs)
+    snr_corner = snr_smooth[:xc, :xc]
+    H_corner = H_smooth[:xc, :xc]
+
+    # Decide the region with 'good' SNR and H
+    # We have an estimate of this from the initial filter, keep all values
+    # Until H starts being dampened
+    ymax = np.argmax(H_corner, axis=0)[0]-filtsize
+    xmax = np.argmax(H_corner, axis=1)[0]-filtsize
+    good_ids = np.nonzero( (XS<xmax)&(YS<ymax) ) 
+    good_log_snr = np.log10(snr_corner[good_ids])
+
+    # SNR array to interpolate
+    log_snr = good_log_snr
+    snr_ids = good_ids
+    snr_ids = (snr_ids[0], snr_ids[1])
+    xs = XS[snr_ids]
+    ys = YS[snr_ids]
+
+    # Add a low SNR at highest frequency edges to help interpolation
+    boundaries = np.arange(xc+1)
+    xs = np.concatenate((xs, np.ones_like(boundaries)*(xc+1), boundaries))
+    ys = np.concatenate((ys, boundaries, np.ones_like(boundaries)*(xc+1)))
+    log_snr = np.concatenate((log_snr, snr_min*np.ones_like(boundaries), snr_min*np.ones_like(boundaries)))
+
+    # Interpolate
+    snr_grid = griddata((xs, ys), log_snr, (XS, YS), method='linear', fill_value=snr_min)
+
+    # Expand the grid (corner) back to the original shape by doubling in X and Y
+    j = -1 
+    k = -1 if (snr_smooth.shape[0] % 2 == 1) else -2
+    fit_snr = np.ones_like(snr_smooth)
+    fit_snr[:xc,:xc] = snr_grid[:j, :j]
+    fit_snr[xc:,:xc] = snr_grid[k::-1, :j]
+    fit_snr[:xc,xc:] = snr_grid[:j, k::-1]
+    fit_snr[xc:,xc:] = snr_grid[k::-1, k::-1]
+    
+    # Undo the log
+    fit_snr = np.power(10, fit_snr)
+
+    # Rewrite the good SNR regions with real values
+    fit_snr[good_ids] = snr_smooth[good_ids]
+
+    ######### FINAL SNR ESTIMATE #####################
+    # Now we have a PSF- and noise-corrected `smooth` SNR estimate
+    # We can use these to find a factor by which we should multiply the 
+    # real SNR to estimate the true SNR
+    corr = fit_snr/snr_smooth
+    snr_final = snr_image*corr
+
+    return np.abs(snr_final)
+
+
 def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
     """Performs deconvolution of the image by dividing by SNR-weighted
     PSF in the Fourier space. Similar to Wiener transform excep the noise
@@ -515,23 +635,26 @@ def fourier_deconvolve(img, psf, noise, convolve_nyquist=False):
     noise = np.random.normal(loc=0, scale=np.abs(noise), size=img.shape)
     noise_fft = np.abs(fft.fft2(noise, norm='ortho'))
     # # Smooth the noise map
-    filtsize = max([3,int(noise_fft.shape[0]*0.1)])
-    noise_fft = uniform_filter(noise_fft, filtsize)
+    # filtsize = max([3,int(noise_fft.shape[0]*0.1)])
+    # noise_fft = uniform_filter(noise_fft, filtsize)
 
     # Get the SNR
-    snr = _fit_snr(img_fft, noise_fft, psf_fft)
+    snr_fft = _fit_snr(img_fft, noise_fft, psf_fft)
 
     # If True, convolve with a narrow PSF - with FWHM = 3 x pxscale
-    if convolve_nyquist:
-        nyquist_size = 3*gaussian_fwhm_to_sigma # FWHM = 3 x pxscale, sigma ~ 0.4 x FWHM
-        nyquist_psf = Gaussian2DKernel(nyquist_size, x_size=img.shape[1], y_size=img.shape[0])
-        nyquist_fft = fft.fft2(fft.ifftshift(nyquist_psf), norm='backward')
-    else:
-        nyquist_fft = 1
+    # if convolve_nyquist:
+    #     nyquist_size = 3*gaussian_fwhm_to_sigma # FWHM = 3 x pxscale, sigma ~ 0.4 x FWHM
+    #     nyquist_psf = Gaussian2DKernel(nyquist_size, x_size=img.shape[1], y_size=img.shape[0])
+    #     nyquist_fft = fft.fft2(fft.ifftshift(nyquist_psf), norm='backward')
+    # else:
+    #     nyquist_fft = 1
+
+    # # Deconvolve
+    # H = (nyquist_fft + 1/snr) / (psf_fft + 1/snr)
+    # img_corr = img_fft * H
 
     # Deconvolve
-    H = (nyquist_fft + 1/snr) / (psf_fft + 1/snr)
-    img_corr = img_fft * H
+    img_corr = deconv_filter(img_fft, psf_fft, snr_fft, True)[0]
 
     # Do an inverse transform
     img_deconv = np.real(fft.ifft2(img_corr, norm='ortho'))

@@ -28,7 +28,7 @@ def get_a_values(img, ap_size, psf_fwhm, pxscale, perfect_pxscale, perfect_shape
     # Non-fourier asymmetries
     a_sq = get_asymmetry(img, ap_size, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=sky)[0]
     a_cas = get_asymmetry(img, ap_size, a_type='cas', sky_type='annulus', bg_corr='residual', sky_annulus=sky)[0]
-    a_cas_corr = get_asymmetry(img, ap_size, a_type='cas_corr', sky_type='annulus', bg_corr='residual', sky_annulus=[2,3])[0]
+    a_cas_corr = get_asymmetry(img, ap_size, a_type='cas_corr', sky_type='annulus', bg_corr='residual', sky_annulus=sky)[0]
     
     # Fourier asymmetry: rescale the image then deconvolve
     if psf_fwhm > perfect_pxscale*3:
@@ -49,7 +49,7 @@ def get_a_values(img, ap_size, psf_fwhm, pxscale, perfect_pxscale, perfect_shape
             a_fourier = np.nan
         else:                                 
             a_fourier = get_asymmetry(
-                img_deconv, ap_size*pxscale/perfect_pxscale, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[2,3]
+                img_deconv, ap_size*pxscale/perfect_pxscale, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=sky
             )[0]
     else:
         a_fourier = a_sq
@@ -130,9 +130,12 @@ if __name__ == '__main__':
     img_params = get_augmentation_rng_vals(N)
     
     # Fix the parameters other than the one I want to vary
+    for p in gal_params:
+        p['mag'] = 15
+        p['r_eff'] = 5#-1.9*p['mag'] + 35
     for p in img_params:
         p['sky_mag'] = 23
-#         p['pxscale'] = perfect_pxscale
+        p['pxscale'] = perfect_pxscale
         p['psf_fwhm'] = 3*p['pxscale']
 
     ap_fracs = (2.5-1)*np.random.random(N)+1

@@ -132,7 +132,7 @@ if __name__ == '__main__':
     # Fix the parameters other than the one I want to vary
     for p in img_params:
         p['sky_mag'] = 23
-#         p['pxscale'] = perfect_pxscale
+        p['pxscale'] = perfect_pxscale
         p['psf_fwhm'] = 3*p['pxscale']
 
     ap_fracs = (2.5-1)*np.random.random(N)+1

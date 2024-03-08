@@ -27,8 +27,8 @@ gsparams = galsim.GSParams(maximum_fft_size=20000)
 # to give more flux to bigger ones so they don't get lost
 _default_clump_properties = {
 	'r' : (0.05, 1.0),
-	'logf' : (-2, -0.3), #-0.3, 0.5
-	'sigma' : (0.03, 3) #0.01
+	'logf' : (-2, -0.3),
+	'sigma' : (0.03, 3)
 }
 
 _default_galaxy_properties = {
@@ -55,14 +55,11 @@ inp_file = (impresources.files(templates) / bandpass_file)
 throughput = galsim.LookupTable.from_file(inp_file)
 bandpass = galsim.Bandpass(throughput, wave_type = u.angstrom)
 ## gain, exptime and diameter of telescope
-# telescope_params = {'g':4.8, 't_exp':53.91, 'D':2.5}
-telescope_params = {'g':4.8, 't_exp': 53.91*1000, 'D':2.5}
+telescope_params = {'g':4.8, 't_exp':53.91, 'D':2.5}
 ## effective wavelength and width of filter
 transmission_params = {'eff_wav':616.5, 'del_wav':137}
 g, t_exp, D = telescope_params['g'],telescope_params['t_exp'],telescope_params['D']
 transmission = bandpass(transmission_params['eff_wav'])
-######### ZEROPOINT: 38
-
 #############################################################
 
 

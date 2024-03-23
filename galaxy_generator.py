@@ -363,7 +363,7 @@ def create_clumps(image, rp, gal_mag, clump_properties=None):
 
 	return clumps, all_xi, all_yi
 
-def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale=0.396, psf_method='galsim',
+def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, pxscale, psf_fwhm=None, psf_method='galsim',
 			use_moffat=False, **kwargs):
 	"""
 	adding source galaxy and clumps to image *then* convolve with psf
@@ -379,7 +379,9 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, psf_fwhm, pxscale
 		image_psf (galsim object) : image with psf-convolved objects added in
 	"""
 	# make copy of image in case iterating over and changing psf each time
-
+	if not psf_fwhm:
+		psf_fwhm = 3*pxscale
+		
 	image_psf = image.copy()
 	if psf_method == 'galsim':
 

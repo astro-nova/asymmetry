@@ -100,7 +100,7 @@ def _asymmetry_center(img, ap_size, sky_a,
     return x0
 
 
-def _asymmetry_func(center, img, ap_size, mask=None,
+def _asymmetry_func(center, img, rpet_px, ap_frac, mask=None,
         a_type='cas', sky_type='skybox', sky_a=None, sky_norm=None, 
         sky_annulus=(1.5, 3), bg_corr='full',
         e=0, theta=0
@@ -113,7 +113,8 @@ def _asymmetry_func(center, img, ap_size, mask=None,
     Args:
         center (np.array): [x0, y0] coordinates of the asymmetry center.
         img (np.array): an NxN image array.
-        ap_size (float): aperture size in pixels.
+        rpet_px (float): aperture size in pixels.
+        ap_frac (float): asymmetry is calculated in ap_frac * rpet_px aperture
         a_type (str): formula to use, 'cas' or 'squared'.
         bg_corr (str): 
             The way to correct for background between 'none', 'residual', 'full'.
@@ -152,6 +153,7 @@ def _asymmetry_func(center, img, ap_size, mask=None,
     mask = mask.astype(bool) | mask_rotated.astype(bool)
 
     # Define the aperture
+    ap_size = rpet_px* ap_frac
     ap = phot.EllipticalAperture(
         center, a=ap_size, b=ap_size*(1-e), theta=theta)
     ap_area = ap.do_photometry(np.ones_like(img), mask=mask)[0][0]
@@ -171,8 +173,8 @@ def _asymmetry_func(center, img, ap_size, mask=None,
     # Calculate sky asymmetry if sky_type is "annulus"
     if sky_type == 'annulus':
         ap_sky = phot.EllipticalAnnulus(
-            center, a_in=ap_size*sky_annulus[0], a_out=ap_size*sky_annulus[1],
-            b_out=ap_size*sky_annulus[1]*(1-e), theta=theta
+            center, a_in=rpet_px*sky_annulus[0], a_out=rpet_px*sky_annulus[1],
+            b_out=rpet_px*sky_annulus[1]*(1-e), theta=theta
         )
         sky_area = ap_sky.do_photometry(np.ones_like(img), mask=mask)[0][0]
         if a_type =='cas':
@@ -203,8 +205,8 @@ def _asymmetry_func(center, img, ap_size, mask=None,
 
 
 def get_asymmetry(
-        img, ap_size, mask=None, a_type='cas', 
-        sky_type='skybox', bg_size=50, sky_annulus=(1.5,3), bg_corr='residual', 
+        img, rpet_px, ap_frac=1.5, mask=None, a_type='cas', 
+        sky_type='skybox', bg_size=50, sky_annulus=(3,4), bg_corr='residual', 
         e=0, theta=0, 
         optimizer='Nelder-Mead', xtol=0.5, atol=0.1
     ):
@@ -214,7 +216,8 @@ def get_asymmetry(
     
     Args:
         img (np.array): an NxN image array.
-        ap_size (float): aperture size in pixels.
+        rpet_px (float): petrosian radius in pixels
+        ap_frac (float): f in fxrpet, aperture size in whcih A is calculated
         a_type (str): formula to use, 'cas' or 'squared'.
         sky_type (str): 'skybox' or 'annulus'.
             If 'skybox', sky A is calculated in a random skybox in the image. 
@@ -223,7 +226,7 @@ def get_asymmetry(
         bg_size (int): For sky_type == 'skybox'. size of the square skybox
         sky_annulus (float, float):
             For sky_type == 'annulus'.
-            The sky A is calculated within a*ap_size and b*ap_size, where (a, b) are given here.
+            The sky A is calculated within a*rpet_px and b*rpet_px, where (a, b) are given here.
         bg_corr (str): 
             The way to correct for background between 'none', 'residual', 'full'.
             If 'none', backgorund A is not subtracted. If 'residual', background 
@@ -256,7 +259,7 @@ def get_asymmetry(
             'xatol': xtol, 'fatol' : atol
         },
         args=(
-            img, ap_size, mask, a_type, 'annulus', None, None, sky_annulus, bg_corr, e, theta
+            img, rpet_px, ap_frac, mask, a_type, 'annulus', None, None, sky_annulus, bg_corr, e, theta
             ))
 
 

@@ -6,6 +6,7 @@
 data/
 figures/
 old-notebooks/
+paper_comms/
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

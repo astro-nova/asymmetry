@@ -65,7 +65,7 @@ def single_galaxy_run(filepath, gal_params, img_params, ap_frac=1.5, perfect_pxs
     # Generate galaxy model. r_pet is in ARCSEC.
     image_perfect, galaxy_dict, r_pet = simulate_perfect_galaxy(pxscale=perfect_pxscale,  **gal_params)
     # Convolve with a PSF to make the "perfect" image nyquist-sampled
-    image_perfect = add_source_to_image(**galaxy_dict, psf_fwhm=3*perfect_pxscale, pxscale=perfect_pxscale, psf_method='astropy')
+    image_perfect = add_source_to_image(**galaxy_dict, pxscale=perfect_pxscale, psf_method='astropy')
     image_perfect, _ = sky_noise(np.abs(image_perfect), pxscale=perfect_pxscale, sky_mag=30, rms_noise=True)
     
     # Generate the perfect galaxy at new pixelscale
@@ -130,8 +130,7 @@ if __name__ == '__main__':
     # Fix the parameters other than the one I want to vary
     for p in img_params:
         p['sky_mag'] = 30
-#         p['pxscale'] = perfect_pxscale
-        p['psf_fwhm'] = 3*p['pxscale']
+        # p['psf_fwhm'] = 3*p['pxscale']
 
     ### Run the execution in parallel
     Parallel(n_jobs=num_cores)(delayed(single_galaxy_run)(

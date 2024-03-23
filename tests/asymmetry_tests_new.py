@@ -23,20 +23,21 @@ from astropy.convolution import Gaussian2DKernel, convolve
 
 num_cores = multiprocessing.cpu_count()
 
-def get_a_values(img, ap_size, psf_fwhm, pxscale, perfect_pxscale, perfect_shape):
-    
+def get_a_values(img, rpet_px, ap_frac, pxscale, perfect_pxscale, perfect_shape):
+
     # Non-fourier asymmetries
-    a_sq = get_asymmetry(img, ap_size, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[2, 3])[0]
-    a_cas = get_asymmetry(img, ap_size, a_type='cas', sky_type='annulus', bg_corr='residual', sky_annulus=[2, 3])[0]
-    a_cas_corr = get_asymmetry(img, ap_size, a_type='cas_corr', sky_type='annulus', bg_corr='residual', sky_annulus=[2,3])[0]
+    a_sq = get_asymmetry(img, rpet_px, ap_frac, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[3, 4])[0]
+    a_cas = get_asymmetry(img, rpet_px, ap_frac, a_type='cas', sky_type='annulus', bg_corr='residual', sky_annulus=[3, 4])[0]
+    a_cas_corr = get_asymmetry(img, rpet_px, ap_frac,  a_type='cas_corr', sky_type='annulus', bg_corr='residual', sky_annulus=[3,4])[0]
     
     # Fourier asymmetry: rescale the image then deconvolve
-    if psf_fwhm > perfect_pxscale*3:
+    if pxscale > perfect_pxscale:
         factor = perfect_pxscale/pxscale
+        bgsd = sigma_clipped_stats(img)[2]
+        err = np.sqrt(img + bgsd**2)
         img_rescaled = T.resize(img, perfect_shape) * factor**2
-        bgsd = sigma_clipped_stats(img_rescaled)[2]
-        err_rescaled = np.sqrt(img_rescaled + bgsd**2)
-        psf = Gaussian2DKernel(psf_fwhm*gaussian_fwhm_to_sigma/perfect_pxscale, x_size=img_rescaled.shape[0])
+        err_rescaled = T.resize(err, perfect_shape) * factor**2
+        psf = Gaussian2DKernel(3*gaussian_fwhm_to_sigma/factor, x_size=img_rescaled.shape[0])
 
         # Deconvolving: not super stable, so try a few times, if still doesn't work, return nan
         img_deconv = np.nan * np.ones_like(img_rescaled)
@@ -49,7 +50,7 @@ def get_a_values(img, ap_size, psf_fwhm, pxscale, perfect_pxscale, perfect_shape
             a_fourier = np.nan
         else:                                 
             a_fourier = get_asymmetry(
-                img_deconv, ap_size*pxscale/perfect_pxscale, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[2,3]
+                img_deconv, rpet_px/factor, ap_frac, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[3,4]
             )[0]
     else:
         a_fourier = a_sq
@@ -87,19 +88,20 @@ def single_galaxy_run(filepath, gal_params, img_params, ap_frac=1.5, perfect_pxs
 
     # Calculate the real asymmetry
     a_cas_real = get_asymmetry(
-        image_perfect, ap_frac*r_pet/perfect_pxscale, a_type='cas', sky_type='annulus', bg_corr='residual', sky_annulus=[2, 3]
+        image_perfect, r_pet/perfect_pxscale, ap_frac, a_type='cas', sky_type='annulus', bg_corr='residual', sky_annulus=[3,4]
     )[0]
     a_sq_real = get_asymmetry(
-        image_perfect, ap_frac*r_pet/perfect_pxscale, a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[2, 3]
+        image_perfect, r_pet/perfect_pxscale, ap_frac,  a_type='squared', sky_type='annulus', bg_corr='full', sky_annulus=[3,4]
     )[0]
     
     # Calculate asyms from the noisy image
-    output = get_a_values(image_noisy, ap_frac*r_pet/pxscale, img_params['psf_fwhm'], pxscale, perfect_pxscale, image_perfect.shape)
+    output = get_a_values(image_noisy, r_pet/pxscale, ap_frac, pxscale, perfect_pxscale, image_perfect.shape)
 
     ##### Store output
     output['a_cas_real'] = a_cas_real
     output['a_sq_real'] = a_sq_real
     output['snr'] = avg_snr
+    output['ap_frac'] = ap_frac
     output = {**output, **gal_params, **img_params}
                          
 

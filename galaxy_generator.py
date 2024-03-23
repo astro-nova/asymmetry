@@ -41,7 +41,7 @@ _default_galaxy_properties = {
 
 _default_aug_properties = {
 	'sky_mag' : (20, 30),
-	'psf_fwhm' : (0.3, 2),
+	# 'psf_fwhm' : (0.3, 2),
 	'pxscale' : (0.1, 2/3)
 }
 
@@ -381,7 +381,7 @@ def add_source_to_image(image, galaxy, clumps, all_xi, all_yi, pxscale, psf_fwhm
 	# make copy of image in case iterating over and changing psf each time
 	if not psf_fwhm:
 		psf_fwhm = 3*pxscale
-		
+
 	image_psf = image.copy()
 	if psf_method == 'galsim':
 
@@ -601,12 +601,12 @@ def get_augmentation_rng_vals(N, lims=_default_aug_properties, seed=None):
 	pxscales = rng.uniform(lims['pxscale'][0], lims['pxscale'][1], size=N)
 
 	# PSF has to be at least 3 x pixel scale
-	psf_lower = pxscales*2
-	psfs = rng.uniform(psf_lower, lims['psf_fwhm'][1], size=N)
+	# psf_lower = pxscales*2
+	# psfs = rng.uniform(psf_lower, lims['psf_fwhm'][1], size=N)
 
 	# Save all these values as output
 	output = {
-		'sky_mag' : sky_mags, 'psf_fwhm' : psfs, 'pxscale' : pxscales
+		'sky_mag' : sky_mags, 'pxscale' : pxscales
 	}
 
 	# Convert to a list of dicts, where each dict can be passed to `simulate_perfect_galaxy`
